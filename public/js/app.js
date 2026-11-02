@@ -9,6 +9,7 @@ const app = $('#app');
 let store, me = null, authMsg = '';
 let page = null; // { uid, member, deck, ro, tab, sub }
 let saveTimer = null, saving = false, dirty = false;
+let calcSort = null; // 멤버 목록 계산기 총점 정렬: null(기본) | 'desc' | 'asc'
 
 document.title = SITE_TITLE;
 
@@ -109,13 +110,35 @@ function renderLogin() {
 // ---------------------------------------------------------------------
 //  멤버 목록 (홈)
 // ---------------------------------------------------------------------
+// 이름 아래 작은 글씨: 팀 · 닉네임 ('팀 미선택'은 표시하지 않음)
+function memberSub(m) {
+  const team = m.team && !m.team.includes('미선택') ? m.team : '';
+  const parts = [team, m.nickname].filter(Boolean).map(esc);
+  return parts.length ? `<small>${parts.join(' · ')}</small>` : '';
+}
+
 async function renderHome() {
   page = null;
   app.innerHTML = `${header()}<main class="wrap"><p class="loading">멤버 목록을 불러오는 중…</p></main>`;
   wireHeader();
   let members = [];
   try { members = await store.listMembers(); } catch (e) { $('main').innerHTML = `<p class="err">멤버 목록을 불러오지 못했습니다: ${esc(e.message)}</p>`; return; }
-  members.sort((a, b) => (a.uid === me.uid ? -1 : b.uid === me.uid ? 1 : (b.mgrTotal || 0) + (b.calcTotal || 0) - (a.mgrTotal || 0) - (a.calcTotal || 0)));
+  const defaultOrder = (a, b) => (a.uid === me.uid ? -1 : b.uid === me.uid ? 1 : (b.mgrTotal || 0) + (b.calcTotal || 0) - (a.mgrTotal || 0) - (a.calcTotal || 0));
+  const sortMembers = () => {
+    if (!calcSort) return members.sort(defaultOrder);
+    const dir = calcSort === 'asc' ? 1 : -1;
+    return members.sort((a, b) => dir * ((a.calcTotal || 0) - (b.calcTotal || 0)) || defaultOrder(a, b));
+  };
+  const rowsHtml = () => members.map((m) => `<tr>
+        <td><a class="who" href="${link(m.uid)}">${avatar(m)}<span><b>${esc(m.name || '이름 없음')}</b>${m.uid === me.uid ? ' <span class="badge">나</span>' : ''}${memberSub(m)}</span></a></td>
+        <td class="r num-cell">${fmt(m.calcTotal || 0)}</td>
+        <td class="r num-cell">${fmt(m.mgrTotal || 0)}</td>
+        <td class="r hide-sm muted">${timeAgo(m.updatedAt)}</td>
+        ${me.admin ? `<td class="r">${m.uid === me.uid ? '' : `<button class="btn danger sm" data-del="${esc(m.uid)}">삭제</button>`}</td>` : ''}
+      </tr>`).join('');
+  const sortArrow = () => (calcSort === 'desc' ? '▼' : calcSort === 'asc' ? '▲' : '↕');
+  const ariaSort = () => (calcSort === 'desc' ? 'descending' : calcSort === 'asc' ? 'ascending' : 'none');
+  sortMembers();
   let blocked = [];
   if (me.admin) { try { blocked = await store.listBlocked(); } catch {} }
   $('main').innerHTML = `
@@ -124,18 +147,22 @@ async function renderHome() {
       <p>${members.length}명 · 이름을 누르면 덱을 볼 수 있습니다. 수정은 본인 덱만 가능합니다.</p>
     </div>
     <table class="members">
-      <thead><tr><th>멤버</th><th class="r">계산기 총점</th><th class="r">관리기 총점</th><th class="r hide-sm">최근 수정</th>${me.admin ? '<th></th>' : ''}</tr></thead>
-      <tbody>${members.map((m) => `<tr>
-        <td><a class="who" href="${link(m.uid)}">${avatar(m)}<span><b>${esc(m.name || '이름 없음')}</b>${m.uid === me.uid ? ' <span class="badge">나</span>' : ''}${m.nickname ? `<small>${esc(m.nickname)}</small>` : ''}</span></a></td>
-        <td class="r num-cell">${fmt(m.calcTotal || 0)}</td>
-        <td class="r num-cell">${fmt(m.mgrTotal || 0)}</td>
-        <td class="r hide-sm muted">${timeAgo(m.updatedAt)}</td>
-        ${me.admin ? `<td class="r">${m.uid === me.uid ? '' : `<button class="btn danger sm" data-del="${esc(m.uid)}">삭제</button>`}</td>` : ''}
-      </tr>`).join('')}</tbody>
+      <thead><tr><th>멤버</th><th class="r" id="calc-sort-th" aria-sort="${ariaSort()}"><button type="button" class="sort-btn" id="calc-sort" title="계산기 총점으로 정렬">계산기 총점 <span class="arrow">${sortArrow()}</span></button></th><th class="r">관리기 총점</th><th class="r hide-sm">최근 수정</th>${me.admin ? '<th></th>' : ''}</tr></thead>
+      <tbody>${rowsHtml()}</tbody>
     </table>
     ${me.admin && blocked.length ? `<section class="panel"><h3>차단된 계정</h3><p class="help">삭제하면서 재가입을 막은 계정입니다. 차단을 풀면 다시 로그인해서 새로 시작할 수 있습니다.</p>
       <ul class="blocked">${blocked.map((b) => `<li><span>${esc(b.name || b.uid)} <small class="muted">${esc(b.email || '')}</small></span><button class="btn ghost sm" data-unblock="${esc(b.uid)}">차단 해제</button></li>`).join('')}</ul></section>` : ''}`;
-  app.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => confirmDelete(members.find((m) => m.uid === b.dataset.del))));
+  const wireDelete = () => app.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => confirmDelete(members.find((m) => m.uid === b.dataset.del))));
+  wireDelete();
+  $('#calc-sort').onclick = () => {
+    // 기본 → 내림차순 → 오름차순 → 기본
+    calcSort = calcSort === null ? 'desc' : calcSort === 'desc' ? 'asc' : null;
+    sortMembers();
+    $('table.members tbody').innerHTML = rowsHtml();
+    $('#calc-sort .arrow').textContent = sortArrow();
+    $('#calc-sort-th').setAttribute('aria-sort', ariaSort());
+    wireDelete();
+  };
   app.querySelectorAll('[data-unblock]').forEach((b) => (b.onclick = async () => {
     try { await store.unblock(b.dataset.unblock); toast('차단을 해제했습니다.'); renderHome(); } catch (e) { toast('차단 해제 실패: ' + e.message, 'err'); }
   }));
@@ -292,7 +319,7 @@ async function flush() {
   setSaveState('저장 중…', 'pending');
   try {
     const { c, m } = results();
-    await store.saveDeck(page.uid, page.deck, { calcTotal: round1(c.total), mgrTotal: round1(m.total), nickname: page.deck.manager.team.nickname || '' });
+    await store.saveDeck(page.uid, page.deck, { calcTotal: round1(c.total), mgrTotal: round1(m.total), nickname: page.deck.manager.team.nickname || '', team: page.deck.manager.team.team || '' });
     setSaveState('저장됨');
   } catch (e) {
     dirty = true;

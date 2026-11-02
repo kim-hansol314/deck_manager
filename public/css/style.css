@@ -97,6 +97,11 @@ small { color: var(--ink-2); }
 .members th { font-size: .82rem; color: var(--ink-2); font-weight: 500; background: var(--chalk); }
 .members tr:last-child td { border-bottom: 0; }
 .members .r { text-align: right; }
+.sort-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font: inherit; color: inherit; }
+.sort-btn:hover { color: var(--ink); }
+.sort-btn:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; border-radius: 3px; }
+.members th[aria-sort="ascending"] .sort-btn, .members th[aria-sort="descending"] .sort-btn { color: var(--ink); font-weight: 700; }
+.sort-btn .arrow { font-size: .75em; opacity: .7; }
 .num-cell { font-family: var(--mono); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 .who { display: flex; gap: 12px; align-items: center; text-decoration: none; }
 .who b { font-weight: 700; }
