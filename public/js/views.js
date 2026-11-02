@@ -158,11 +158,68 @@ export function renderCalc(st) {
         <li>흰존 −1.5 · 콜존 −3 · 좌타 −2.5 · 좌완 +1</li>
         <li>발사각 13~25도 + 파워 기준 충족 시 1~5점 (18도 이상 5점 고정)</li>
         <li>국에 5렙/6렙: 타자 +1.85/+3.7, 투수 +2.4/+4.8 · 포수리드 5~10렙 +1.05~+4.8</li>
-        <li>POTM 보너스: 골글 +1 · 시그/임팩 +2 · 라올 +3 · 라이브 5성 +8 · 4성 +14 · 3성 이하 +18</li>
+        <li>POTM 보너스: 골글 +1 · 시그/임팩 +2 · 라올(타팀) +3 · 라올(자팀) +6 · 라이브 5성 +8 · 4성 +14 · 3성 이하 +18</li>
       </ul>
     </div>
+  </section>
+  ${renderPlayerCmp()}`;
+}
+
+// 선수 비교: 타자 2명·투수 2명을 위 표와 같은 공식으로 계산해 비교
+function renderPlayerCmp() {
+  const P = 'calc.playerCmp';
+  const bRows = [0, 1].map((i) => {
+    const p = `${P}.b.${i}`;
+    return `<tr>
+      <th class="pos">타자 ${i + 1}</th>
+      <td>${txt(p + '.name', { cls: 'name', label: '타자 이름' })}</td>
+      <td class="score">${out(`c.pc.b.${i}.score`)}</td>
+      ${['power', 'contact', 'eye', 'patience'].map((k) => `<td>${num(`${p}.${k}`, { label: k })}<small class="plus" data-out="c.pc.b.${i}.plus"></small></td>`).join('')}
+      <td>${num(p + '.skill', { label: '스킬점수' })}</td>
+      <td>${num(p + '.white', { cls: 'xs', min: 0, label: '흰존' })}</td>
+      <td>${num(p + '.cold', { cls: 'xs', min: 0, label: '콜존' })}</td>
+      <td>${sel(p + '.fullSwing', OPTIONS.sr)}</td>
+      <td>${sel(p + '.clutch', OPTIONS.sr)}</td>
+      <td>${sel(p + '.gakjam', OPTIONS.gakjamCalc)}</td>
+      <td class="c">${chk(p + '.leftBat', { label: '좌타' })}</td>
+      <td>${num(p + '.launch', { cls: 'xs', label: '발사각' })}<small class="hint" data-out="c.pc.b.${i}.launch"></small></td>
+      <td>${sel(p + '.potm', OPTIONS.potm, { blankLabel: '없음' })}</td>
+    </tr>`;
+  }).join('');
+  const pRows = [0, 1].map((i) => {
+    const p = `${P}.p.${i}`;
+    return `<tr>
+      <th class="pos">투수 ${i + 1}</th>
+      <td>${txt(p + '.name', { cls: 'name', label: '투수 이름' })}</td>
+      <td class="score">${out(`c.pc.p.${i}.score`)}</td>
+      <td>${num(p + '.stuff', { label: '변화' })}<small class="plus" data-out="c.pc.p.${i}.plus"></small></td>
+      <td>${num(p + '.velo', { label: '구위' })}<small class="plus" data-out="c.pc.p.${i}.plus"></small></td>
+      <td>${num(p + '.skill', { label: '스킬점수' })}</td>
+      <td>${sel(p + '.long', OPTIONS.sr)}</td>
+      <td>${sel(p + '.calm', OPTIONS.sr)}</td>
+      <td>${sel(p + '.gakjam', OPTIONS.gakjamCalc)}</td>
+      <td class="c">${chk(p + '.lefty', { label: '좌완' })}</td>
+      <td>${sel(p + '.potm', OPTIONS.potm, { blankLabel: '없음' })}</td>
+    </tr>`;
+  }).join('');
+  return `
+  <section class="panel">
+    <h3>선수 비교</h3>
+    <p class="help">두 선수를 위 타자·투수 표와 같은 공식으로 계산해 비교합니다. 국에·포수리드는 공통 설정을 따르고, 중계 전술 보너스는 넣지 않습니다.</p>
+    <div class="tbl-wrap"><table class="grid">
+      <thead><tr><th></th><th>이름</th><th>보정스탯</th><th>파워</th><th>정확</th><th>선구</th><th>인내</th><th>스킬점수</th><th>흰존</th><th>콜존</th><th>풀스윙</th><th>클러치</th><th>각잠</th><th>좌타</th><th>발사각</th><th>POTM</th></tr></thead>
+      <tbody>${bRows}</tbody>
+    </table></div>
+    <div class="groups"><div><span>타자 차이 (타자 2 − 타자 1)</span><b data-out="c.pc.b.diff"></b></div></div>
+    <div class="tbl-wrap"><table class="grid">
+      <thead><tr><th></th><th>이름</th><th>보정스탯</th><th>변화</th><th>구위</th><th>스킬점수</th><th>장억</th><th>침착</th><th>각잠</th><th>좌완</th><th>POTM</th></tr></thead>
+      <tbody>${pRows}</tbody>
+    </table></div>
+    <div class="groups"><div><span>투수 차이 (투수 2 − 투수 1)</span><b data-out="c.pc.p.diff"></b></div></div>
   </section>`;
 }
+
+const signed = (v) => (v > 0 ? '+' : '') + fmt(v);
 
 export function calcOutputs(st, r) {
   const o = {};
@@ -176,6 +233,21 @@ export function calcOutputs(st, r) {
     o[`c.p.${i}.plus`] = p.bonus ? `+${p.bonus}` : '';
     o[`c.p.${i}.tactic`] = p.tactic ? `+${p.tactic}` : '';
   });
+  const pc = r.playerCmp;
+  // 스탯을 하나도 안 넣은 비교 칸은 점수·차이를 비워 둠
+  const bOn = pc.b.map((b) => !!(b.power || b.contact || b.eye || b.patience));
+  const pOn = pc.p.map((p) => !!(p.stuff || p.velo));
+  pc.b.forEach((b, i) => {
+    o[`c.pc.b.${i}.score`] = bOn[i] ? fmt(b.score) : '';
+    o[`c.pc.b.${i}.plus`] = b.bonus ? `+${b.bonus}` : '';
+    o[`c.pc.b.${i}.launch`] = b.launchBonus ? `+${b.launchBonus}` : '';
+  });
+  pc.p.forEach((p, i) => {
+    o[`c.pc.p.${i}.score`] = pOn[i] ? fmt(p.score) : '';
+    o[`c.pc.p.${i}.plus`] = p.bonus ? `+${p.bonus}` : '';
+  });
+  o['c.pc.b.diff'] = bOn[0] && bOn[1] ? signed(pc.b[1].score - pc.b[0].score) : '–';
+  o['c.pc.p.diff'] = pOn[0] && pOn[1] ? signed(pc.p[1].score - pc.p[0].score) : '–';
   Object.assign(o, {
     'c.relay': r.relayOrder, 'c.bsum': fmt(r.batterSum), 'c.bavg': fmt(r.batterAvg), 'c.psum': fmt(r.pitcherSum), 'c.pavg': fmt(r.pitcherAvg),
     'c.g.core': fmt(r.groups.core), 'c.g.upper': fmt(r.groups.upper), 'c.g.middle': fmt(r.groups.middle), 'c.g.lower': fmt(r.groups.lower),

@@ -49,6 +49,10 @@ small { color: var(--ink-2); }
 .me { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .me .btn { color: #fff; border-color: rgba(255,255,255,.4); }
 .me-name { font-weight: 500; }
+.me-btn { display: flex; align-items: center; gap: 8px; font: inherit; color: inherit; background: none; border: 0; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+.me-btn:hover { background: rgba(255,255,255,.12); }
+.alias-in { width: 100%; height: 44px; font-size: 1rem; padding: 8px 12px; }
+.login-card .dlg-actions .btn.google { width: auto; }
 .demo-bar { background: var(--lamp); color: #2b2300; padding: 6px 24px; font-size: .86rem; }
 
 .wrap { max-width: 1320px; margin: 0 auto; padding: 24px; }
@@ -72,6 +76,8 @@ small { color: var(--ink-2); }
 .avatar { width: 36px; height: 36px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--field); color: #fff; font-weight: 700; object-fit: cover; flex: none; }
 .avatar.sm { width: 26px; height: 26px; font-size: .8rem; background: rgba(255,255,255,.2); }
 .avatar.lg { width: 56px; height: 56px; font-size: 1.3rem; }
+.avatar.team { background: #fff; box-shadow: inset 0 0 0 2px var(--team); overflow: hidden; }
+.avatar.team img { width: 72%; height: 72%; object-fit: contain; display: block; }
 
 /* ---- 로그인 ---- */
 .login { min-height: calc(100vh - 60px); display: grid; place-items: center; padding: 24px 16px; }

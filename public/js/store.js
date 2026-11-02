@@ -34,7 +34,7 @@ async function firebaseStore() {
     onAuth(cb) {
       return A.onAuthStateChanged(auth, async (u) => {
         if (!u) return cb(null);
-        const user = { uid: u.uid, name: u.displayName || u.email, email: u.email, photo: u.photoURL || '', admin: isAdminEmail(u.email) && u.emailVerified };
+        const user = { uid: u.uid, name: u.displayName || u.email, email: u.email, photo: '', admin: isAdminEmail(u.email) && u.emailVerified };
         try {
           const blocked = await F.getDoc(F.doc(db, 'blocked', u.uid));
           if (blocked.exists()) { await A.signOut(auth); return cb(null, '관리자가 삭제한 계정입니다. 다시 사용하려면 관리자에게 차단 해제를 요청하세요.'); }
@@ -44,6 +44,8 @@ async function firebaseStore() {
           if (!snap.exists()) {
             await F.setDoc(ref, { name: user.name, email: user.email || '', photo: user.photo, calcTotal: 0, mgrTotal: 0, createdAt: now, updatedAt: now, lastLogin: now });
           } else {
+            user.alias = snap.data().alias || '';
+            user.team = snap.data().team || '';
             await F.updateDoc(ref, { name: user.name, photo: user.photo, lastLogin: now });
           }
         } catch (e) { console.error(e); return cb(null, '프로필을 저장하지 못했습니다: ' + e.message); }
@@ -52,6 +54,8 @@ async function firebaseStore() {
     },
     async signIn() { await A.signInWithPopup(auth, provider); },
     async signOut() { await A.signOut(auth); },
+    // 멤버 목록에 보일 닉네임 (구글 이름 대신 표시)
+    async setAlias(uid, alias) { await F.updateDoc(F.doc(db, 'users', uid), { alias, updatedAt: Date.now() }); },
     async listMembers() {
       const qs = await F.getDocs(F.collection(db, 'users'));
       return qs.docs.map((d) => ({ uid: d.id, ...d.data() }));
@@ -99,7 +103,7 @@ function demoStore() {
     const s = d.session;
     if (!s) return listener && listener(null);
     if (d.blocked[s.uid]) { d.session = null; save(d); return listener && listener(null, '관리자가 삭제한 계정입니다.'); }
-    listener && listener({ ...s, admin: isAdminEmail(s.email) });
+    listener && listener({ ...s, alias: (d.users[s.uid] && d.users[s.uid].alias) || '', team: (d.users[s.uid] && d.users[s.uid].team) || '', admin: isAdminEmail(s.email) });
   };
   const guard = (uid) => { const s = load().session; if (!s || s.uid !== uid) throw new Error('본인 데이터만 수정할 수 있습니다.'); };
   const guardAdmin = () => { const s = load().session; if (!s || !isAdminEmail(s.email)) throw new Error('관리자만 삭제할 수 있습니다.'); };
@@ -117,6 +121,7 @@ function demoStore() {
       save(d); emit();
     },
     async signOut() { const d = load(); d.session = null; save(d); emit(); },
+    async setAlias(uid, alias) { guard(uid); const d = load(); d.users[uid] = { ...d.users[uid], alias, updatedAt: Date.now() }; save(d); },
     async listMembers() { const d = load(); return Object.entries(d.users).map(([uid, u]) => ({ uid, ...u })); },
     async getMember(uid) { const u = load().users[uid]; return u ? { uid, ...u } : null; },
     async getDeck(uid) { const j = load().decks[uid]; return j ? JSON.parse(j) : null; },

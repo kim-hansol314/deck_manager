@@ -41,7 +41,7 @@ export const OPTIONS = {
   chaseTeam: ['기본', '적극'],
   sr: ['범부', 'S', 'SR', 'SR+'],
   gakjamCalc: ['개방X', 'C', 'C+', 'S'],
-  potm: ['', '골글', '시그', '임팩', '라올', '라이브(5성)', '라이브(4성)', '라이브(3성이하)'],
+  potm: ['', '골글', '시그', '임팩', '라올(타팀)', '라올(자팀)', '라이브(5성)', '라이브(4성)', '라이브(3성이하)'],
   teams: ['LG 트윈스', '삼성 라이온즈', 'KIA 타이거즈', '두산 베어스', 'NC 다이노스', 'SSG 랜더스', '한화 이글스', '키움 히어로즈', 'kt 위즈', '롯데 자이언츠', '❌ 팀 미선택 ❌'],
   cardType: ['골글', '시그', '시그(F)', '임팩', '임팩(F)', '국대', '라올'],
   awaken: ['10강', '1각', '2각', '3각', '4각', '5각', '6각', '7각', '8각', '9각'],
@@ -73,7 +73,9 @@ export function potmBonus(item) {
     case '골글': return 1;
     case '시그': return 2;
     case '임팩': return 2;
-    case '라올': return 3;
+    case '라올': // 예전 값 (= 타팀)
+    case '라올(타팀)': return 3;
+    case '라올(자팀)': return 6;
     case '라이브(5성)': return 8;
     case '라이브(4성)': return 14;
     case '라이브(3성이하)': return 18;
@@ -100,13 +102,44 @@ export function relayOrder(tactic) {
   return ({ '330': '셋1 추1 셋2 승1 추2 추3', '240': '승1 추1 승2 추2 추3 추4', '114': '승1 추1 롱1 롱2 롱3 롱4', '141': '승1 추1 추2 롱1 추3 추4' })[s(tactic)] || '투수전술 선택';
 }
 
+const blankBatter = (pos = '') => ({ pos, name: '', power: '', contact: '', eye: '', patience: '', skill: '', white: 0, cold: 0, fullSwing: '범부', clutch: '범부', gakjam: '개방X', leftBat: false, launch: '', potm: '' });
+const blankPitcher = (pos = '') => ({ pos, name: '', stuff: '', velo: '', skill: '', long: '범부', calm: '범부', gakjam: '개방X', lefty: false, potm: '' });
+
 export function defaultCalc() {
   return {
     settings: { batterBuff: '6렙', pitcherBuff: '6렙', catcherLead: '6렙', tactic: '114', winTeam: '기본', chaseTeam: '기본' },
-    batters: CALC_BATTER_POS.map((pos) => ({ pos, name: '', power: '', contact: '', eye: '', patience: '', skill: '', white: 0, cold: 0, fullSwing: '범부', clutch: '범부', gakjam: '개방X', leftBat: false, launch: '', potm: '' })),
-    pitchers: CALC_PITCHER_POS.map((pos) => ({ pos, name: '', stuff: '', velo: '', skill: '', long: '범부', calm: '범부', gakjam: '개방X', lefty: false, potm: '' })),
+    batters: CALC_BATTER_POS.map(blankBatter),
+    pitchers: CALC_PITCHER_POS.map(blankPitcher),
     compare: { b: [{ p: '', c: '', e: '' }, { p: '', c: '', e: '' }], p: [{ velo: '', stuff: '' }, { velo: '', stuff: '' }] },
+    // 선수 비교 칸 (타자 2명, 투수 2명)
+    playerCmp: { b: [blankBatter(), blankBatter()], p: [blankPitcher(), blankPitcher()] },
   };
+}
+
+// 타자 한 명의 보정스탯 (타자 표·선수 비교 공통)
+function batterScore(b, bBuff) {
+  const bonus = potmBonus(b.potm);
+  const has = (v) => s(v) !== '';
+  const power = has(b.power) ? n(b.power) + bonus : 0;
+  const contact = has(b.contact) ? n(b.contact) + bonus : 0;
+  const eye = has(b.eye) ? n(b.eye) + bonus : 0;
+  const pat = has(b.patience) ? n(b.patience) + bonus : 0;
+  const L = LAUNCH_TABLE[n(b.launch)];
+  const launchBonus = L && power >= L[0] ? L[1] : 0;
+  const score = power + contact * 0.85 + eye * 0.4 + pat * 0.15 + n(b.skill) - n(b.white) * 1.5 - n(b.cold) * 3
+    + fullSwingPts(b.fullSwing) + clutchPts(b.clutch) + gakjamPts(b.gakjam) - (b.leftBat ? 2.5 : 0) + bBuff + launchBonus;
+  return { bonus, power, contact, eye, patience: pat, launchBonus, score };
+}
+
+// 투수 한 명의 보정스탯 (calmSrPlus: 침착 SR+ 점수, tactic: 중계 전술 보너스)
+function pitcherScore(p, pBuff, cBuff, calmSrPlus = 9, tactic = 0) {
+  const bonus = potmBonus(p.potm);
+  const has = (v) => s(v) !== '';
+  const stuff = has(p.stuff) ? n(p.stuff) + bonus : 0;
+  const velo = has(p.velo) ? n(p.velo) + bonus : 0;
+  const score = stuff * 1.05 + velo * 1.35 + n(p.skill) + longPts(p.long) + calmPts(p.calm, calmSrPlus)
+    + (p.lefty ? 1 : 0) + gakjamPts(p.gakjam) + pBuff + cBuff + tactic;
+  return { bonus, stuff, velo, tactic, score };
 }
 
 export function computeCalc(st) {
@@ -116,19 +149,7 @@ export function computeCalc(st) {
   const pBuff = buffPitcher(S.pitcherBuff);
   const cBuff = buffCatcher(S.catcherLead);
 
-  const batters = st.batters.map((b) => {
-    const bonus = potmBonus(b.potm);
-    const has = (v) => s(v) !== '';
-    const power = has(b.power) ? n(b.power) + bonus : 0;
-    const contact = has(b.contact) ? n(b.contact) + bonus : 0;
-    const eye = has(b.eye) ? n(b.eye) + bonus : 0;
-    const pat = has(b.patience) ? n(b.patience) + bonus : 0;
-    const L = LAUNCH_TABLE[n(b.launch)];
-    const launchBonus = L && power >= L[0] ? L[1] : 0;
-    const score = power + contact * 0.85 + eye * 0.4 + pat * 0.15 + n(b.skill) - n(b.white) * 1.5 - n(b.cold) * 3
-      + fullSwingPts(b.fullSwing) + clutchPts(b.clutch) + gakjamPts(b.gakjam) - (b.leftBat ? 2.5 : 0) + bBuff + launchBonus;
-    return { bonus, power, contact, eye, patience: pat, launchBonus, score };
-  });
+  const batters = st.batters.map((b) => batterScore(b, bBuff));
 
   // 중계 전술 보너스(행마다 원본 수식이 다름 → 그대로 이식)
   const W = s(S.winTeam), C = s(S.chaseTeam);
@@ -143,15 +164,7 @@ export function computeCalc(st) {
     /*CP*/ 0,
   ];
 
-  const pitchers = st.pitchers.map((p, i) => {
-    const bonus = potmBonus(p.potm);
-    const has = (v) => s(v) !== '';
-    const stuff = has(p.stuff) ? n(p.stuff) + bonus : 0;
-    const velo = has(p.velo) ? n(p.velo) + bonus : 0;
-    const score = stuff * 1.05 + velo * 1.35 + n(p.skill) + longPts(p.long) + calmPts(p.calm, i >= 10 ? 8 : 9)
-      + (p.lefty ? 1 : 0) + gakjamPts(p.gakjam) + pBuff + cBuff + tacticBonus[i];
-    return { bonus, stuff, velo, tactic: tacticBonus[i], score };
-  });
+  const pitchers = st.pitchers.map((p, i) => pitcherScore(p, pBuff, cBuff, i >= 10 ? 8 : 9, tacticBonus[i]));
 
   const bs = batters.map((b) => b.score);
   const core = (large(bs, 1) + large(bs, 2) + large(bs, 3)) / 3;
@@ -168,6 +181,7 @@ export function computeCalc(st) {
   const pitcherSum = starterSum + relieverSum + closerSum;
 
   const cmp = st.compare || { b: [], p: [] };
+  const pc = st.playerCmp || { b: [], p: [] };
   return {
     batters, pitchers,
     total: batterSum + pitcherSum,
@@ -179,6 +193,10 @@ export function computeCalc(st) {
     compare: {
       b: (cmp.b || []).map((r) => n(r.p) + n(r.c) * 0.85 + n(r.e) * 0.4),
       p: (cmp.p || []).map((r) => n(r.velo) + n(r.stuff) * 0.78),
+    },
+    playerCmp: {
+      b: (pc.b || []).map((b) => batterScore(b, bBuff)),
+      p: (pc.p || []).map((p) => pitcherScore(p, pBuff, cBuff)),
     },
   };
 }

@@ -25,7 +25,12 @@ function merge(def, got) {
   }
   return got;
 }
-function normalize(deck) { return merge(blankDeck(), deck || {}); }
+function normalize(deck) {
+  const d = merge(blankDeck(), deck || {});
+  // 예전 POTM '라올'은 '라올(타팀)'으로 바꿈 (저장된 덱·엑셀 모두)
+  for (const r of [...d.calc.batters, ...d.calc.pitchers]) if (String(r.potm).trim() === '라올') r.potm = '라올(타팀)';
+  return d;
+}
 
 function toast(msg, kind = '') {
   const t = document.createElement('div');
@@ -45,8 +50,21 @@ const timeAgo = (ts) => {
 };
 // 주소 형식: #home, #u-<uid>-calc, #u-<uid>-mgr-<탭>
 const link = (uid, tab = 'calc', sub) => `#u-${uid}-${tab}${sub ? '-' + sub : ''}`;
+// 화면에 보이는 이름: 직접 정한 닉네임 우선, 없으면 구글 이름
+const dname = (m) => (m && (m.alias || m.name)) || '이름 없음';
 const initials = (n) => (n || '?').trim().slice(0, 1).toUpperCase();
-const avatar = (m, cls = '') => (m.photo ? `<img class="avatar ${cls}" src="${esc(m.photo)}" alt="" referrerpolicy="no-referrer">` : `<span class="avatar ${cls}">${esc(initials(m.name))}</span>`);
+// 프로필 자리: 고른 구단 로고(public/img), 구단이 없으면 닉네임 첫 글자
+const TEAM_BADGE = {
+  'LG 트윈스': ['twins.png', '#C30452'], '삼성 라이온즈': ['lions.svg', '#074CA1'], 'KIA 타이거즈': ['tigers.svg', '#EA0029'],
+  '두산 베어스': ['bears.svg', '#131230'], 'NC 다이노스': ['dinos.svg', '#315288'], 'SSG 랜더스': ['landers.png', '#CE0E2D'],
+  '한화 이글스': ['eagles.svg', '#FC4E00'], '키움 히어로즈': ['heroes.png', '#820024'], 'kt 위즈': ['wiz.svg', '#1A1A1A'],
+  '롯데 자이언츠': ['giants.svg', '#041E42'],
+};
+const avatar = (m, cls = '') => {
+  const t = TEAM_BADGE[m.team];
+  if (t) return `<span class="avatar team ${cls}" style="--team:${t[1]}" title="${esc(m.team)}"><img src="img/${t[0]}" alt="${esc(m.team)}"></span>`;
+  return `<span class="avatar ${cls}">${esc(initials(dname(m)))}</span>`;
+};
 
 // ---------------------------------------------------------------------
 //  레이아웃
@@ -58,7 +76,7 @@ function header() {
       <a href="#home" class="${!page ? 'on' : ''}">멤버</a>
       <a href="${link(me.uid)}" class="${page && page.uid === me.uid ? 'on' : ''}">내 덱</a>
     </nav>
-    <div class="me">${avatar(me, 'sm')}<span class="me-name">${esc(me.name)}</span>${me.admin ? '<span class="badge admin">관리자</span>' : ''}<button class="btn ghost sm" id="logout">로그아웃</button></div>` : ''}
+    <div class="me"><button type="button" class="me-btn" id="edit-alias" title="닉네임 변경">${avatar(me, 'sm')}<span class="me-name">${esc(dname(me))}</span></button>${me.admin ? '<span class="badge admin">관리자</span>' : ''}<button class="btn ghost sm" id="logout">로그아웃</button></div>` : ''}
   </header>
   ${isDemo ? '<div class="demo-bar">데모 모드 — 이 브라우저에만 저장됩니다. 실제 서비스는 README 안내대로 Firebase를 연결하세요.</div>' : ''}`;
 }
@@ -66,6 +84,49 @@ function header() {
 function wireHeader() {
   const b = $('#logout');
   if (b) b.onclick = async () => { await flush(); await store.signOut(); location.hash = '#home'; };
+  const e = $('#edit-alias');
+  if (e) e.onclick = async () => { await flush(); renderAlias(true); };
+}
+
+// ---------------------------------------------------------------------
+//  닉네임 설정 (첫 로그인 시 필수, 이후 상단 이름을 눌러 변경)
+// ---------------------------------------------------------------------
+const ALIAS_MAX = 20;
+function renderAlias(editing = false) {
+  page = null;
+  app.innerHTML = `${header()}
+  <main class="login">
+    <form class="login-card" id="alias-form">
+      <h1>${editing ? '닉네임 변경' : '닉네임 정하기'}</h1>
+      <p>멤버 목록에 구글 계정 이름 대신 이 닉네임이 보입니다.</p>
+      <input class="in alias-in" id="alias" maxlength="${ALIAS_MAX}" placeholder="닉네임 (최대 ${ALIAS_MAX}자)" value="${esc(me.alias || '')}" autocomplete="off" required>
+      <p class="err" id="alias-err" hidden></p>
+      <div class="dlg-actions">
+        ${editing ? '<a class="btn ghost" href="#home" id="alias-cancel">취소</a>' : ''}
+        <button class="btn google" type="submit">${editing ? '변경' : '시작하기'}</button>
+      </div>
+    </form>
+  </main>`;
+  wireHeader();
+  const input = $('#alias'), err = $('#alias-err');
+  input.focus();
+  const cancel = $('#alias-cancel');
+  if (cancel) cancel.onclick = (ev) => { ev.preventDefault(); route(); };
+  const showErr = (t) => { err.textContent = t; err.hidden = false; };
+  $('#alias-form').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const alias = input.value.trim().replace(/\s+/g, ' ');
+    if (!alias) return showErr('닉네임을 입력하세요.');
+    if (alias.length > ALIAS_MAX) return showErr(`닉네임은 ${ALIAS_MAX}자까지 쓸 수 있습니다.`);
+    try {
+      const others = (await store.listMembers()).filter((m) => m.uid !== me.uid);
+      if (others.some((m) => dname(m).toLowerCase() === alias.toLowerCase())) return showErr('이미 다른 멤버가 쓰는 닉네임입니다.');
+      await store.setAlias(me.uid, alias);
+      me.alias = alias;
+      toast(editing ? '닉네임을 바꿨습니다.' : `${alias} 님, 환영합니다!`);
+      route();
+    } catch (e) { showErr('저장하지 못했습니다: ' + e.message); }
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -130,7 +191,7 @@ async function renderHome() {
     return members.sort((a, b) => dir * ((a.calcTotal || 0) - (b.calcTotal || 0)) || defaultOrder(a, b));
   };
   const rowsHtml = () => members.map((m) => `<tr>
-        <td><a class="who" href="${link(m.uid)}">${avatar(m)}<span><b>${esc(m.name || '이름 없음')}</b>${m.uid === me.uid ? ' <span class="badge">나</span>' : ''}${memberSub(m)}</span></a></td>
+        <td><a class="who" href="${link(m.uid)}">${avatar(m)}<span><b>${esc(dname(m))}</b>${m.uid === me.uid ? ' <span class="badge">나</span>' : ''}${memberSub(m)}</span></a></td>
         <td class="r num-cell">${fmt(m.calcTotal || 0)}</td>
         <td class="r num-cell">${fmt(m.mgrTotal || 0)}</td>
         <td class="r hide-sm muted">${timeAgo(m.updatedAt)}</td>
@@ -184,7 +245,7 @@ function confirmDelete(m) {
   const dlg = document.createElement('dialog');
   dlg.className = 'dlg';
   dlg.innerHTML = `<form method="dialog">
-    <h3>${esc(m.name)} 님을 삭제할까요?</h3>
+    <h3>${esc(dname(m))} 님을 삭제할까요?</h3>${m.alias && m.name ? `<p class="help">구글 이름: ${esc(m.name)}${m.email ? ` (${esc(m.email)})` : ''}</p>` : ''}
     <p>이 멤버의 계산기·관리기 데이터가 모두 지워지고 되돌릴 수 없습니다.</p>
     <label class="row"><input type="checkbox" id="blk" checked> 다시 로그인해도 가입되지 않게 차단</label>
     <div class="dlg-actions"><button class="btn ghost" value="cancel">취소</button><button class="btn danger" value="ok" id="okdel">삭제</button></div>
@@ -196,7 +257,7 @@ function confirmDelete(m) {
     const ok = dlg.returnValue === 'ok';
     dlg.remove();
     if (!ok) return;
-    try { await store.deleteMember(m, block); toast(`${m.name} 님을 삭제했습니다.`); renderHome(); }
+    try { await store.deleteMember(m, block); toast(`${dname(m)} 님을 삭제했습니다.`); renderHome(); }
     catch (e) { toast('삭제하지 못했습니다: ' + e.message, 'err'); }
   });
 }
@@ -230,7 +291,7 @@ function renderDeck() {
   <main class="wrap deck ${P.ro ? 'readonly' : ''}">
     <div class="deck-head">
       <div class="who big">${avatar(P.member, 'lg')}<div>
-        <h1>${esc(P.member.name)}${nick ? ` <small>${esc(nick)}</small>` : ''}</h1>
+        <h1>${esc(dname(P.member))}${nick ? ` <small>${esc(nick)}</small>` : ''}</h1>
         <p>${P.ro ? '<span class="badge view">보기 전용</span> 다른 멤버의 덱은 볼 수만 있습니다.' : '내 덱 · 입력하면 자동으로 저장됩니다. <span class="save" id="savestate">저장됨</span>'}</p>
       </div></div>
       ${P.ro ? '' : `<div class="deck-actions">
@@ -319,8 +380,14 @@ async function flush() {
   setSaveState('저장 중…', 'pending');
   try {
     const { c, m } = results();
-    await store.saveDeck(page.uid, page.deck, { calcTotal: round1(c.total), mgrTotal: round1(m.total), nickname: page.deck.manager.team.nickname || '', team: page.deck.manager.team.team || '' });
+    const team = page.deck.manager.team.team || '';
+    await store.saveDeck(page.uid, page.deck, { calcTotal: round1(c.total), mgrTotal: round1(m.total), nickname: page.deck.manager.team.nickname || '', team });
     setSaveState('저장됨');
+    if (page.uid === me.uid && me.team !== team) {
+      // 구단을 바꾸면 화면의 아이콘도 바로 바꿈
+      me.team = team; page.member.team = team;
+      document.querySelectorAll('.top .avatar, .deck-head .avatar').forEach((el) => (el.outerHTML = avatar(me, el.classList.contains('lg') ? 'lg' : 'sm')));
+    }
   } catch (e) {
     dirty = true;
     setSaveState('저장 실패', 'err');
@@ -376,6 +443,7 @@ async function resetTab() {
 // ---------------------------------------------------------------------
 function route() {
   if (!me) return renderLogin();
+  if (!me.alias) return renderAlias();
   const m = location.hash.match(/^#u-([A-Za-z0-9_-]+?)-(calc|mgr)(?:-(team|lineup|dbB|dbP))?$/);
   if (m) return openDeck(m[1], m[2], m[3]);
   return renderHome();
