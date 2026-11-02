@@ -113,6 +113,11 @@ small { color: var(--ink-2); }
 .who b { font-weight: 700; }
 .who small { display: block; }
 a.who:hover b { text-decoration: underline; }
+.admin-tbl th, .admin-tbl td { padding: 10px 12px; font-size: .9rem; vertical-align: middle; }
+.admin-tbl .num-cell { font-size: 1rem; }
+.admin-search { width: min(280px, 100%); height: 34px; }
+.block { display: block; }
+.nowrap { white-space: nowrap; }
 .blocked { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
 .blocked li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
 

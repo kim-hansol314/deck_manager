@@ -73,8 +73,9 @@ function header() {
   return `<header class="top">
     <a class="brand" href="#home"><span class="ball" aria-hidden="true"></span>${esc(SITE_TITLE)}</a>
     ${me ? `<nav>
-      <a href="#home" class="${!page ? 'on' : ''}">멤버</a>
+      <a href="#home" class="${!page && location.hash !== '#admin' ? 'on' : ''}">멤버</a>
       <a href="${link(me.uid)}" class="${page && page.uid === me.uid ? 'on' : ''}">내 덱</a>
+      ${me.admin ? `<a href="#admin" class="${!page && location.hash === '#admin' ? 'on' : ''}">멤버 관리</a>` : ''}
     </nav>
     <div class="me"><button type="button" class="me-btn" id="edit-alias" title="닉네임 변경">${avatar(me, 'sm')}<span class="me-name">${esc(dname(me))}</span></button>${me.admin ? '<span class="badge admin">관리자</span>' : ''}<button class="btn ghost sm" id="logout">로그아웃</button></div>` : ''}
   </header>
@@ -195,26 +196,19 @@ async function renderHome() {
         <td class="r num-cell">${fmt(m.calcTotal || 0)}</td>
         <td class="r num-cell">${fmt(m.mgrTotal || 0)}</td>
         <td class="r hide-sm muted">${timeAgo(m.updatedAt)}</td>
-        ${me.admin ? `<td class="r">${m.uid === me.uid ? '' : `<button class="btn danger sm" data-del="${esc(m.uid)}">삭제</button>`}</td>` : ''}
       </tr>`).join('');
   const sortArrow = () => (calcSort === 'desc' ? '▼' : calcSort === 'asc' ? '▲' : '↕');
   const ariaSort = () => (calcSort === 'desc' ? 'descending' : calcSort === 'asc' ? 'ascending' : 'none');
   sortMembers();
-  let blocked = [];
-  if (me.admin) { try { blocked = await store.listBlocked(); } catch {} }
   $('main').innerHTML = `
     <div class="page-head">
       <h1>멤버</h1>
-      <p>${members.length}명 · 이름을 누르면 덱을 볼 수 있습니다. 수정은 본인 덱만 가능합니다.</p>
+      <p>${members.length}명 · 이름을 누르면 덱을 볼 수 있습니다. ${me.admin ? '관리자는 모든 멤버의 덱을 수정할 수 있습니다. 삭제·차단은 <a href="#admin">멤버 관리</a>에서 합니다.' : '수정은 본인 덱만 가능합니다.'}</p>
     </div>
     <table class="members">
-      <thead><tr><th>멤버</th><th class="r" id="calc-sort-th" aria-sort="${ariaSort()}"><button type="button" class="sort-btn" id="calc-sort" title="계산기 총점으로 정렬">계산기 총점 <span class="arrow">${sortArrow()}</span></button></th><th class="r">관리기 총점</th><th class="r hide-sm">최근 수정</th>${me.admin ? '<th></th>' : ''}</tr></thead>
+      <thead><tr><th>멤버</th><th class="r" id="calc-sort-th" aria-sort="${ariaSort()}"><button type="button" class="sort-btn" id="calc-sort" title="계산기 총점으로 정렬">계산기 총점 <span class="arrow">${sortArrow()}</span></button></th><th class="r">관리기 총점</th><th class="r hide-sm">최근 수정</th></tr></thead>
       <tbody>${rowsHtml()}</tbody>
-    </table>
-    ${me.admin && blocked.length ? `<section class="panel"><h3>차단된 계정</h3><p class="help">삭제하면서 재가입을 막은 계정입니다. 차단을 풀면 다시 로그인해서 새로 시작할 수 있습니다.</p>
-      <ul class="blocked">${blocked.map((b) => `<li><span>${esc(b.name || b.uid)} <small class="muted">${esc(b.email || '')}</small></span><button class="btn ghost sm" data-unblock="${esc(b.uid)}">차단 해제</button></li>`).join('')}</ul></section>` : ''}`;
-  const wireDelete = () => app.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => confirmDelete(members.find((m) => m.uid === b.dataset.del))));
-  wireDelete();
+    </table>`;
   $('#calc-sort').onclick = () => {
     // 기본 → 내림차순 → 오름차순 → 기본
     calcSort = calcSort === null ? 'desc' : calcSort === 'desc' ? 'asc' : null;
@@ -222,10 +216,71 @@ async function renderHome() {
     $('table.members tbody').innerHTML = rowsHtml();
     $('#calc-sort .arrow').textContent = sortArrow();
     $('#calc-sort-th').setAttribute('aria-sort', ariaSort());
-    wireDelete();
   };
+}
+
+// ---------------------------------------------------------------------
+//  멤버 관리 (관리자 전용): 멤버 정보 열람·삭제, 차단 목록·차단 해제
+// ---------------------------------------------------------------------
+const fmtDate = (ts) => (ts ? new Date(ts).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–');
+
+async function renderAdmin() {
+  page = null;
+  app.innerHTML = `${header()}<main class="wrap"><p class="loading">멤버 정보를 불러오는 중…</p></main>`;
+  wireHeader();
+  let members = [], blocked = [];
+  try { [members, blocked] = await Promise.all([store.listMembers(), store.listBlocked()]); }
+  catch (e) { $('main').innerHTML = `<p class="err">불러오지 못했습니다: ${esc(e.message)}</p>`; return; }
+  members.sort((a, b) => (b.lastLogin || 0) - (a.lastLogin || 0));
+  blocked.sort((a, b) => (b.at || 0) - (a.at || 0));
+  const team = (m) => (m.team && !m.team.includes('미선택') ? m.team : '–');
+  const memberRows = (q) => {
+    const list = members.filter((m) => !q || [m.alias, m.name, m.email, m.nickname, m.team].some((v) => String(v || '').toLowerCase().includes(q)));
+    if (!list.length) return `<tr><td colspan="9" class="muted">${q ? '검색 결과가 없습니다.' : '멤버가 없습니다.'}</td></tr>`;
+    return list.map((m) => `<tr>
+      <td><a class="who" href="${link(m.uid)}">${avatar(m)}<span><b>${esc(dname(m))}</b>${m.uid === me.uid ? ' <span class="badge">나</span>' : ''}${m.alias ? '' : ' <span class="badge">닉네임 없음</span>'}${m.nickname ? `<small>게임 닉네임 · ${esc(m.nickname)}</small>` : ''}</span></a></td>
+      <td>${esc(m.name || '–')}<small class="muted block">${esc(m.email || '')}</small></td>
+      <td>${esc(team(m))}</td>
+      <td class="r num-cell">${fmt(m.calcTotal || 0)}</td>
+      <td class="r num-cell">${fmt(m.mgrTotal || 0)}</td>
+      <td class="muted nowrap">${fmtDate(m.createdAt)}</td>
+      <td class="muted nowrap" title="${fmtDate(m.lastLogin)}">${timeAgo(m.lastLogin)}</td>
+      <td class="muted nowrap" title="${fmtDate(m.updatedAt)}">${timeAgo(m.updatedAt)}</td>
+      <td class="r">${m.uid === me.uid ? '' : `<button class="btn danger sm" data-del="${esc(m.uid)}">삭제</button>`}</td>
+    </tr>`).join('');
+  };
+  $('main').innerHTML = `
+    <div class="page-head">
+      <h1>멤버 관리</h1>
+      <p>멤버 ${members.length}명 · 차단 ${blocked.length}명 · 관리자만 볼 수 있는 페이지입니다.</p>
+    </div>
+    <section class="panel">
+      <div class="panel-head"><h3>현재 멤버</h3><input class="in admin-search" id="admin-q" type="search" placeholder="닉네임·이름·이메일·팀 검색" aria-label="멤버 검색"></div>
+      <div class="tbl-wrap"><table class="members admin-tbl">
+        <thead><tr><th>멤버</th><th>구글 계정</th><th>팀</th><th class="r">계산기</th><th class="r">관리기</th><th>가입일</th><th>최근 로그인</th><th>최근 수정</th><th></th></tr></thead>
+        <tbody id="admin-members">${memberRows('')}</tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h3>차단된 계정</h3>
+      <p class="help">삭제하면서 재가입을 막은 계정입니다. 차단을 풀면 다시 로그인해서 새로 시작할 수 있습니다(예전 덱 데이터는 남아 있지 않습니다).</p>
+      ${blocked.length ? `<div class="tbl-wrap"><table class="members admin-tbl">
+        <thead><tr><th>닉네임 / 구글 이름</th><th>이메일</th><th>차단일</th><th></th></tr></thead>
+        <tbody>${blocked.map((b) => `<tr>
+          <td><b>${esc(b.alias || b.name || '이름 없음')}</b>${b.alias && b.name ? `<small class="muted block">${esc(b.name)}</small>` : ''}</td>
+          <td class="muted">${esc(b.email || '–')}</td>
+          <td class="muted nowrap">${fmtDate(b.at)}</td>
+          <td class="r"><button class="btn ghost sm" data-unblock="${esc(b.uid)}">차단 해제</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : '<p class="empty">차단된 계정이 없습니다.</p>'}
+    </section>`;
+  const wireDelete = () => app.querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => confirmDelete(members.find((m) => m.uid === b.dataset.del))));
+  wireDelete();
+  $('#admin-q').oninput = (e) => { $('#admin-members').innerHTML = memberRows(e.target.value.trim().toLowerCase()); wireDelete(); };
   app.querySelectorAll('[data-unblock]').forEach((b) => (b.onclick = async () => {
-    try { await store.unblock(b.dataset.unblock); toast('차단을 해제했습니다.'); renderHome(); } catch (e) { toast('차단 해제 실패: ' + e.message, 'err'); }
+    const x = blocked.find((v) => v.uid === b.dataset.unblock);
+    if (!(await ask(`${x.alias || x.name || '이 계정'}의 차단을 풀까요?`, '차단을 풀면 이 계정으로 다시 로그인해 가입할 수 있습니다.', '차단 해제'))) return;
+    try { await store.unblock(x.uid); toast('차단을 해제했습니다.'); renderAdmin(); } catch (e) { toast('차단 해제 실패: ' + e.message, 'err'); }
   }));
 }
 
@@ -257,7 +312,7 @@ function confirmDelete(m) {
     const ok = dlg.returnValue === 'ok';
     dlg.remove();
     if (!ok) return;
-    try { await store.deleteMember(m, block); toast(`${dname(m)} 님을 삭제했습니다.`); renderHome(); }
+    try { await store.deleteMember(m, block); toast(`${dname(m)} 님을 삭제했습니다.`); route(); }
     catch (e) { toast('삭제하지 못했습니다: ' + e.message, 'err'); }
   });
 }
@@ -276,7 +331,8 @@ async function openDeck(uid, tab, sub) {
       [member, deck] = await Promise.all([store.getMember(uid), store.getDeck(uid)]);
     } catch (e) { $('main').innerHTML = `<p class="err">불러오지 못했습니다: ${esc(e.message)}</p>`; return; }
     if (!member) { $('main').innerHTML = '<p class="err">없는 멤버이거나 삭제된 멤버입니다. <a href="#home">멤버 목록으로</a></p>'; return; }
-    page = { uid, member, deck: normalize(deck), ro: uid !== me.uid };
+    // 본인 덱은 수정 가능, 관리자는 다른 멤버 덱도 수정 가능
+    page = { uid, member, deck: normalize(deck), ro: uid !== me.uid && !me.admin };
   }
   page.tab = tab === 'mgr' ? 'mgr' : 'calc';
   page.sub = MGR_TABS.some(([k]) => k === sub) ? sub : 'team';
@@ -292,7 +348,9 @@ function renderDeck() {
     <div class="deck-head">
       <div class="who big">${avatar(P.member, 'lg')}<div>
         <h1>${esc(dname(P.member))}${nick ? ` <small>${esc(nick)}</small>` : ''}</h1>
-        <p>${P.ro ? '<span class="badge view">보기 전용</span> 다른 멤버의 덱은 볼 수만 있습니다.' : '내 덱 · 입력하면 자동으로 저장됩니다. <span class="save" id="savestate">저장됨</span>'}</p>
+        <p>${P.ro ? '<span class="badge view">보기 전용</span> 다른 멤버의 덱은 볼 수만 있습니다.'
+          : P.uid !== me.uid ? '<span class="badge admin">관리자 수정</span> 다른 멤버의 덱입니다. 입력하면 이 멤버의 덱에 자동으로 저장됩니다. <span class="save" id="savestate">저장됨</span>'
+          : '내 덱 · 입력하면 자동으로 저장됩니다. <span class="save" id="savestate">저장됨</span>'}</p>
       </div></div>
       ${P.ro ? '' : `<div class="deck-actions">
         <label class="btn ghost" title="기존 POTM 엑셀(.xlsm) 내용을 불러옵니다">엑셀 가져오기<input type="file" id="xl" accept=".xlsm,.xlsx,.xls" hidden></label>
@@ -444,6 +502,7 @@ async function resetTab() {
 function route() {
   if (!me) return renderLogin();
   if (!me.alias) return renderAlias();
+  if (location.hash === '#admin') return me.admin ? renderAdmin() : renderHome();
   const m = location.hash.match(/^#u-([A-Za-z0-9_-]+?)-(calc|mgr)(?:-(team|lineup|dbB|dbP))?$/);
   if (m) return openDeck(m[1], m[2], m[3]);
   return renderHome();

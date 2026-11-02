@@ -79,7 +79,7 @@ async function firebaseStore() {
       const batch = F.writeBatch(db);
       batch.delete(F.doc(db, 'decks', uid));
       batch.delete(F.doc(db, 'users', uid));
-      if (block) batch.set(F.doc(db, 'blocked', uid), { at: Date.now(), name: m.name || '', email: m.email || '' });
+      if (block) batch.set(F.doc(db, 'blocked', uid), { at: Date.now(), name: m.name || '', alias: m.alias || '', email: m.email || '' });
       await batch.commit();
     },
     async listBlocked() {
@@ -126,7 +126,8 @@ function demoStore() {
     async getMember(uid) { const u = load().users[uid]; return u ? { uid, ...u } : null; },
     async getDeck(uid) { const j = load().decks[uid]; return j ? JSON.parse(j) : null; },
     async saveDeck(uid, deck, summary) {
-      guard(uid);
+      const s = load().session;
+      if (!(s && isAdminEmail(s.email))) guard(uid);
       const d = load(); const now = Date.now();
       d.decks[uid] = JSON.stringify(deck);
       d.users[uid] = { ...d.users[uid], ...summary, updatedAt: now };
@@ -137,7 +138,7 @@ function demoStore() {
       const uid = m.uid;
       const d = load();
       delete d.decks[uid]; delete d.users[uid];
-      if (block) d.blocked[uid] = { at: Date.now(), name: m.name || '', email: m.email || '' };
+      if (block) d.blocked[uid] = { at: Date.now(), name: m.name || '', alias: m.alias || '', email: m.email || '' };
       save(d);
     },
     async listBlocked() { return Object.entries(load().blocked).map(([uid, b]) => ({ uid, ...b })); },

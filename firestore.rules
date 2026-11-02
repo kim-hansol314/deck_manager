@@ -28,13 +28,16 @@ service cloud.firestore {
         && request.resource.data.name is string && request.resource.data.name.size() <= 100
         && (!('alias' in request.resource.data)
             || (request.resource.data.alias is string && request.resource.data.alias.size() >= 1 && request.resource.data.alias.size() <= 20));
+      // 관리자가 다른 멤버 덱을 고치면 목록의 점수 요약만 갱신 (이름·이메일 등은 못 바꿈)
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nickname', 'team', 'calcTotal', 'mgrTotal', 'updatedAt']);
       allow delete: if isAdmin();
     }
 
     // 덱 데이터 (계산기 + 관리기 전체를 JSON 문자열로 저장)
     match /decks/{uid} {
       allow read: if signedIn();
-      allow create, update: if isOwner(uid) && notBlocked()
+      allow create, update: if (isOwner(uid) && notBlocked() || isAdmin())
         && request.resource.data.keys().hasOnly(['json', 'updatedAt'])
         && request.resource.data.json is string
         && request.resource.data.json.size() < 900000;
