@@ -205,7 +205,7 @@ function renderPlayerCmp() {
   return `
   <section class="panel">
     <h3>선수 비교</h3>
-    <p class="help">두 선수를 위 타자·투수 표와 같은 공식으로 계산해 비교합니다. 국에·포수리드는 공통 설정을 따르고, 중계 전술 보너스는 넣지 않습니다.</p>
+    <p class="help">두 선수를 위 타자·투수 표와 같은 공식으로 계산해 비교합니다. </p>
     <div class="tbl-wrap"><table class="grid">
       <thead><tr><th></th><th>이름</th><th>보정스탯</th><th>파워</th><th>정확</th><th>선구</th><th>인내</th><th>스킬점수</th><th>흰존</th><th>콜존</th><th>풀스윙</th><th>클러치</th><th>각잠</th><th>좌타</th><th>발사각</th><th>POTM</th></tr></thead>
       <tbody>${bRows}</tbody>
