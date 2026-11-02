@@ -1,0 +1,48 @@
+rules_version = '2';
+// =====================================================================
+//  권한 규칙 (서버에서 강제됨 — 브라우저 코드를 고쳐도 우회할 수 없음)
+//   - 로그인한 멤버는 모든 멤버의 덱을 "볼" 수 있음
+//   - 덱 수정은 본인 것만
+//   - 멤버 삭제·차단은 관리자만
+//  ※ 관리자 이메일을 바꾸면 public/js/config.js 의 ADMIN_EMAILS 도 같이 바꾸세요.
+// =====================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['maestro4123@gmail.com'];
+    }
+    function notBlocked() {
+      return !exists(/databases/$(database)/documents/blocked/$(request.auth.uid));
+    }
+
+    // 멤버 프로필 (목록·점수 요약)
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create, update: if isOwner(uid) && notBlocked()
+        && request.resource.data.keys().hasOnly(['name', 'email', 'photo', 'nickname', 'calcTotal', 'mgrTotal', 'createdAt', 'updatedAt', 'lastLogin'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 100;
+      allow delete: if isAdmin();
+    }
+
+    // 덱 데이터 (계산기 + 관리기 전체를 JSON 문자열로 저장)
+    match /decks/{uid} {
+      allow read: if signedIn();
+      allow create, update: if isOwner(uid) && notBlocked()
+        && request.resource.data.keys().hasOnly(['json', 'updatedAt'])
+        && request.resource.data.json is string
+        && request.resource.data.json.size() < 900000;
+      allow delete: if isAdmin();
+    }
+
+    // 관리자가 삭제하면서 재가입을 막은 계정
+    match /blocked/{uid} {
+      allow read: if isAdmin() || isOwner(uid);
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
