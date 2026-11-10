@@ -1,6 +1,6 @@
 import { createStore, isDemo } from './store.js';
 import { SITE_TITLE, ADMIN_EMAILS } from './config.js';
-import { computeCalc, computeManager, defaultCalc, defaultManager } from './calc.js';
+import { computeCalc, computeManager, defaultCalc, defaultManager, importCalcToDB } from './calc.js';
 import { importCalc, importManager, SHEETS } from './importer.js';
 import { bind, getPath, setPath, renderCalc, calcOutputs, renderManager, managerOutputs, MGR_TABS, datalists, esc, fmt } from './views.js';
 
@@ -284,12 +284,12 @@ async function renderAdmin() {
   }));
 }
 
-function ask(title, body, okLabel) {
+function ask(title, body, okLabel, okCls = 'danger') {
   return new Promise((resolve) => {
     const dlg = document.createElement('dialog');
     dlg.className = 'dlg';
     dlg.innerHTML = `<form method="dialog"><h3>${esc(title)}</h3><p>${esc(body)}</p>
-      <div class="dlg-actions"><button class="btn ghost" value="cancel">취소</button><button class="btn danger" value="ok">${esc(okLabel)}</button></div></form>`;
+      <div class="dlg-actions"><button class="btn ghost" value="cancel">취소</button><button class="btn ${okCls}" value="ok">${esc(okLabel)}</button></div></form>`;
     document.body.appendChild(dlg);
     dlg.showModal();
     dlg.addEventListener('close', () => { resolve(dlg.returnValue === 'ok'); dlg.remove(); });
@@ -380,6 +380,7 @@ function renderDeck() {
     $('#xl').onchange = onImport;
     $('#reset-tab').onclick = resetTab;
     view.addEventListener('pointerdown', onDragStart);
+    view.addEventListener('click', (e) => { const b = e.target.closest('[data-calc-import]'); if (b) importFromCalc(b.dataset.calcImport); });
   }
   refreshOutputs();
 }
@@ -541,6 +542,29 @@ async function onImport(e) {
     toast(`${parts} 데이터를 가져왔습니다.`);
   } catch (err) { toast('가져오지 못했습니다: ' + err.message, 'err'); }
 }
+// 덱 보정 계산기의 타자/투수 → 관리기 선수 DB
+async function importFromCalc(kind) {
+  const label = kind === 'b' ? '타자' : '투수';
+  const rows = (kind === 'b' ? page.deck.calc.batters : page.deck.calc.pitchers).filter((r) => String(r.name || '').trim());
+  if (!rows.length) return toast(`덱 보정 계산기에 이름이 입력된 ${label}가 없습니다.`, 'err');
+  const ok = await ask(`계산기 ${label} ${rows.length}명을 DB로 불러올까요?`,
+    '빈 칸에 추가하고, 전에 계산기에서 불러온 선수는 최신 값으로 갱신합니다. DB에 직접 입력한 같은 이름의 선수는 건드리지 않습니다. 스탯은 POTM 보너스를 더해 "기본" 칸에 들어가며, 스킬은 이름·레벨을 따로 입력해야 합니다.',
+    '불러오기', 'primary');
+  if (!ok) return;
+  const db = kind === 'b' ? page.deck.manager.dbB : page.deck.manager.dbP;
+  const r = importCalcToDB(kind, page.deck.calc[kind === 'b' ? 'batters' : 'pitchers'], db);
+  const y = window.scrollY;
+  renderDeck();
+  window.scrollTo(0, y);
+  if (r.added.length || r.updated.length) scheduleSave();
+  const parts = [];
+  if (r.added.length) parts.push(`추가 ${r.added.length}명`);
+  if (r.updated.length) parts.push(`갱신 ${r.updated.length}명`);
+  if (r.skipped.length) parts.push(`직접 입력한 선수와 이름이 같아 건너뜀: ${r.skipped.join(', ')}`);
+  if (r.full.length) parts.push(`DB가 꽉 차서 못 넣음: ${r.full.join(', ')}`);
+  toast(parts.join(' · ') || '바뀐 내용이 없습니다.', r.full.length || r.skipped.length ? 'err' : '');
+}
+
 async function resetTab() {
   const name = page.tab === 'calc' ? '덱 보정 계산기' : '덱 보정 관리기';
   if (!(await ask(`${name}의 입력값을 모두 지울까요?`, '되돌릴 수 없습니다.', '모두 지우기'))) return;

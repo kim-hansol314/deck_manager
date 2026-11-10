@@ -67,6 +67,8 @@ small { color: var(--ink-2); }
 .btn.sm { padding: 4px 10px; font-size: .86rem; }
 .btn.danger { color: var(--seam); border-color: color-mix(in srgb, var(--seam) 45%, transparent); background: transparent; }
 .btn.danger:hover { background: var(--seam); color: #fff; }
+.btn.primary { background: var(--field); border-color: var(--field); color: #fff; }
+.btn.primary:hover { filter: brightness(1.1); }
 .btn.google { background: var(--paper); font-size: 1rem; padding: 12px 20px; width: 100%; justify-content: center; border-color: var(--ink-2); }
 
 .badge { display: inline-block; font-size: .74rem; font-weight: 500; padding: 1px 8px; border-radius: 999px; background: var(--line-soft); color: var(--ink-2); vertical-align: middle; }

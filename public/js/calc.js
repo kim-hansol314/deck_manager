@@ -247,6 +247,62 @@ export function defaultManager() {
   };
 }
 
+// --- 덱 보정 계산기 → 선수 DB 불러오기 ----------------------------------
+// 계산기 스탯(입력값 + POTM 보너스)을 DB "기본" 칸에 넣고, 종류·각성은 비워 공통 보정이 중복되지 않게 함.
+// 계산기의 스킬점수는 숫자라 DB(스킬 이름+레벨)로 옮길 수 없음.
+const POTM_TO_TYPE = { '골글': '골글', '시그': '시그', '임팩': '임팩', '라올': '라올', '라올(타팀)': '라올', '라올(자팀)': '라올' };
+const CALC_GRADE = (v) => (['S', 'SR', 'SR+', 'C', 'C+'].includes(s(v)) ? s(v) : '');
+function calcStat(v, bonus) { return s(v) === '' ? '' : n(v) + bonus; }
+
+function batterFromCalc(b) {
+  const bonus = potmBonus(b.potm);
+  return {
+    pos: OPTIONS.batterPos.includes(s(b.pos)) ? s(b.pos) : '', type: POTM_TO_TYPE[s(b.potm)] || '', awaken: '', name: s(b.name),
+    full: CALC_GRADE(b.fullSwing), clutch: CALC_GRADE(b.clutch), gakjam: CALC_GRADE(b.gakjam),
+    train: [b.power, b.contact, b.eye, b.patience].map((v) => [calcStat(v, bonus), '', '']),
+    hand: b.leftBat ? '좌' : '', launch: b.launch ?? '', white: b.white ?? '', cold: b.cold ?? '',
+  };
+}
+function pitcherFromCalc(p) {
+  const bonus = potmBonus(p.potm);
+  const pos = s(p.pos).replace(/^\d/, '');
+  return {
+    pos: OPTIONS.pitcherPos.includes(pos) ? pos : '', type: POTM_TO_TYPE[s(p.potm)] || '', awaken: '', name: s(p.name),
+    jang: CALC_GRADE(p.long), chim: CALC_GRADE(p.calm), gakjam: CALC_GRADE(p.gakjam),
+    train: [p.stuff, p.velo].map((v) => [calcStat(v, bonus), '', '']),
+    lefty: p.lefty ? 'O' : '',
+  };
+}
+
+// kind: 'b' | 'p'. db 배열을 직접 고치고 결과 개수를 돌려줌.
+// - 계산기에서 불러온 행(fromCalc)과 이름이 같으면 갱신
+// - 직접 입력한 행과 이름이 같으면 건너뜀
+// - 그 외는 빈 행에 추가 (빈 행이 없으면 full)
+export function importCalcToDB(kind, calcRows, db) {
+  const conv = kind === 'b' ? batterFromCalc : pitcherFromCalc;
+  const empty = kind === 'b' ? emptyBatterDB : emptyPitcherDB;
+  const res = { added: [], updated: [], skipped: [], full: [] };
+  const seen = new Set();
+  for (const row of calcRows) {
+    const name = s(row.name);
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    const data = conv(row);
+    const i = db.findIndex((r) => s(r.name) === name);
+    if (i >= 0) {
+      if (!db[i].fromCalc) { res.skipped.push(name); continue; }
+      db[i] = { ...db[i], ...data, fromCalc: true };
+      res.updated.push(name);
+      continue;
+    }
+    const j = db.findIndex((r) => !s(r.name) && !s(r.type));
+    if (j < 0) { res.full.push(name); continue; }
+    db[j] = { ...empty(), ...data, fromCalc: true };
+    res.added.push(name);
+  }
+  return res;
+}
+
 // --- 참조 테이블 조회 --------------------------------------------------
 const skillMap = (rows) => {
   const m = new Map();

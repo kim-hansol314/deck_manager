@@ -411,6 +411,10 @@ function mgrLineup(st) {
   </section>`;
 }
 
+function calcImportBtn(kind) {
+  if (ctx.ro) return '';
+  return `<button type="button" class="btn ghost sm" data-calc-import="${kind}" title="덱 보정 계산기의 ${kind === 'b' ? '타자' : '투수'}를 이 DB의 빈 칸에 넣습니다">덱 보정 계산기에서 불러오기</button>`;
+}
 function trainCells(base, k) {
   return [0, 1, 2].map((j) => `<td>${num(`${base}.train.${k}.${j}`, { cls: 'xs' })}</td>`).join('');
 }
@@ -440,7 +444,7 @@ function mgrDbB(st) {
   }).join('');
   return `
   <section class="panel">
-    <div class="panel-head"><h3>타자 DB (보관함)</h3></div>
+    <div class="panel-head"><h3>타자 DB (보관함)</h3>${calcImportBtn('b')}</div>
     <p class="help">셋포 75: 연도타자 파정+3 · 180: 연도선수 +1 · 185: 연도타자 +1 (임팩은 75만). 깡보정스탯은 발사각 보너스 없이 단순 비교용입니다. 재분 확률은 파정만 반영합니다.</p>
     <div class="tbl-wrap tall"><table class="grid db">
       <thead>
@@ -476,7 +480,7 @@ function mgrDbP(st) {
   }).join('');
   return `
   <section class="panel">
-    <div class="panel-head"><h3>투수 DB (보관함)</h3></div>
+    <div class="panel-head"><h3>투수 DB (보관함)</h3>${calcImportBtn('p')}</div>
     <p class="help">셋포 75: 연도투수 구+3 · 180: 연도선수 +1 · 190: 연도투수 변+3, 구+1 (셋포55와의 합). 재분 확률은 변구만 반영합니다.</p>
     <div class="tbl-wrap tall"><table class="grid db">
       <thead>
