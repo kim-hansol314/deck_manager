@@ -307,6 +307,7 @@ export function importCalcToDB(kind, calcRows, db) {
 // 예전 스킬 이름도 점수를 찾음 — 이미 저장된 덱이 0점이 되지 않게
 //  1) skillAlias: 이름이 바뀐 스킬 (예: 클러치피처 → 클러치피쳐)
 //  2) 선발/불펜으로 나뉜 투수 스킬: 포지션에 맞는 쪽을 고름
+//     (DB 표는 DB 포지션, 라인업은 배치된 자리 기준. RP = 필승조·셋업·추격조·롱릴리프 = 불펜)
 //     예: 집중력 → SP면 집중력(선발), RP·CP면 집중력(불펜)
 //         좌승사자(좌투) → 좌승사자(좌투,선발) / 좌승사자(좌투,불펜)
 const skillMap = (rows) => {
@@ -534,7 +535,10 @@ export function computeManager(st) {
   const lineupP = st.lineupP.map((L, i) => {
     const idx = findP(L.name);
     const r = idx >= 0 ? st.dbP[idx] : null;
-    const c = idx >= 0 ? dbP[idx] : null;
+    // 선발/불펜으로 나뉜 스킬은 DB 포지션이 아니라 라인업 자리 기준으로 고름
+    // (1~5SP = 선발, 1~6RP = 필승조·셋업·추격조·롱릴리프 모두 불펜, CP = 마무리)
+    const slotPos = i < 5 ? 'SP' : i <= 10 ? 'RP' : 'CP';
+    const c = idx < 0 ? null : s(r.pos) === slotPos ? dbP[idx] : computePitcherDB({ ...r, pos: slotPos });
     const f = r ? s(r.type) : '', g = r ? s(r.awaken) : '', h = r ? s(r.year) : '';
     const isSP = i < 5;
     const set = setdeckPitcher(T, sd, h, f, isSP);
