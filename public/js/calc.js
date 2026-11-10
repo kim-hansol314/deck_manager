@@ -304,17 +304,33 @@ export function importCalcToDB(kind, calcRows, db) {
 }
 
 // --- 참조 테이블 조회 --------------------------------------------------
-// 예전 스킬 이름(skillAlias)도 새 이름의 점수로 찾음 — 이미 저장된 덱이 0점이 되지 않게
-const skillMap = (rows, alias = {}) => {
+// 예전 스킬 이름도 점수를 찾음 — 이미 저장된 덱이 0점이 되지 않게
+//  1) skillAlias: 이름이 바뀐 스킬 (예: 클러치피처 → 클러치피쳐)
+//  2) 선발/불펜으로 나뉜 투수 스킬: 포지션에 맞는 쪽을 고름
+//     예: 집중력 → SP면 집중력(선발), RP·CP면 집중력(불펜)
+//         좌승사자(좌투) → 좌승사자(좌투,선발) / 좌승사자(좌투,불펜)
+const skillMap = (rows) => {
   const m = new Map();
   rows.forEach((r) => { if (!m.has(s(r[0]))) m.set(s(r[0]), r.slice(1)); });
-  Object.entries(alias).forEach(([from, to]) => { if (!m.has(s(from)) && m.has(s(to))) m.set(s(from), m.get(s(to))); });
   return m;
 };
-const SKILL_B = skillMap(DATA.skillBatter, DATA.skillAlias?.batter);
-const SKILL_P = skillMap(DATA.skillPitcher, DATA.skillAlias?.pitcher);
-function skillScore(map, name, lv) {
-  const row = map.get(s(name));
+const SKILL_B = { rows: skillMap(DATA.skillBatter), alias: DATA.skillAlias?.batter || {} };
+const SKILL_P = { rows: skillMap(DATA.skillPitcher), alias: DATA.skillAlias?.pitcher || {} };
+const ROLE_TAGS = { SP: ['선발'], RP: ['불펜', '중계'], CP: ['마무리', '불펜'] };
+function findSkill(table, name, pos) {
+  let key = s(name);
+  if (!key) return null;
+  if (table.rows.has(key)) return table.rows.get(key);
+  if (table.alias[key]) key = table.alias[key];
+  if (table.rows.has(key)) return table.rows.get(key);
+  const m = key.match(/^(.*)\(([^()]*)\)$/);
+  for (const t of ROLE_TAGS[s(pos)] || ROLE_TAGS.SP) {
+    for (const cand of [`${key}(${t})`, m && `${m[1]}(${m[2]},${t})`]) if (cand && table.rows.has(cand)) return table.rows.get(cand);
+  }
+  return null;
+}
+function skillScore(table, name, lv, pos) {
+  const row = findSkill(table, name, pos);
   const L = n(lv);
   if (!row || !Number.isInteger(L) || L < 5 || L > 10) return 0;
   return n(row[L - 5]);
@@ -393,13 +409,13 @@ export function computePitcherDB(r) {
     baseSums[0] + (isImp ? 0 : (r.s180 ? 1 : 0) + (r.s190 ? 3 : 0)),
     baseSums[1] + (isImp ? (r.s75 ? 3 : 0) : (r.s75 ? 3 : 0) + (r.s180 ? 1 : 0) + (r.s190 ? 1 : 0)),
   ];
-  const skill = skillScore(SKILL_P, r.sk1, r.lv1) + skillScore(SKILL_P, r.sk2, r.lv2) + skillScore(SKILL_P, r.sk3, r.lv3);
+  const skill = skillScore(SKILL_P, r.sk1, r.lv1, r.pos) + skillScore(SKILL_P, r.sk2, r.lv2, r.pos) + skillScore(SKILL_P, r.sk3, r.lv3, r.pos);
   // 원본은 투수 포틈 판정이 $D$50(타자DB 1행)을 참조하는 오타 → 각 투수 행의 포틈으로 수정
   const pf = (v) => (r.potteum ? Math.max(0, v) : v);
   const gak = pf(potential(r.jang, 2)) + pf(potential(r.chim, 3)) + potential(r.gakjam, 4);
   const score = stats[0] * 1.05 + stats[1] * 1.35 + skill + gak + (s(r.lefty) === 'O' ? 1 : 0);
   const lv = BASE_SKILL_TYPES[T];
-  const rawSkill = lv ? skillScore(SKILL_P, r.sk1, lv[0]) + skillScore(SKILL_P, r.sk2, lv[1]) + skillScore(SKILL_P, r.sk3, lv[2]) : 0;
+  const rawSkill = lv ? skillScore(SKILL_P, r.sk1, lv[0], r.pos) + skillScore(SKILL_P, r.sk2, lv[1], r.pos) + skillScore(SKILL_P, r.sk3, lv[2], r.pos) : 0;
   const trn = [0, 1].map((k) => (tr[k] || [])[1]);
   const spc = [0, 1].map((k) => (tr[k] || [])[2]);
   const joined = (a) => (a.map(s).join('/') === '/' ? '' : a.map(s).join('/'));

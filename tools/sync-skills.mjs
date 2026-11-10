@@ -56,9 +56,15 @@ const fmtAlias = (m) => Object.entries(m).map(([a, b]) => `      ${JSON.stringif
 
 const batter = rows(win.SKILL_SCORES.batter);
 const pitcher = rows(win.SKILL_SCORES.pitcher);
+// 별칭 대상은 그 이름 그대로 있거나, 투수라면 (선발)/(불펜) 등으로 나뉘어 있어야 함 (calc.js findSkill 과 같은 규칙)
+const TAGS = ['선발', '불펜', '중계', '마무리'];
+const exists = (names, to) => names.has(to) || TAGS.some((t) => {
+  const m = to.match(/^(.*)\(([^()]*)\)$/);
+  return names.has(`${to}(${t})`) || (m && names.has(`${m[1]}(${m[2]},${t})`));
+});
 for (const [kind, list] of [['batter', batter], ['pitcher', pitcher]]) {
   const names = new Set(list.map((r) => r[0]));
-  for (const [from, to] of Object.entries(ALIAS[kind])) if (!names.has(to)) throw new Error(`${kind} 별칭 대상이 skills.js 에 없음: ${from} → ${to}`);
+  for (const [from, to] of Object.entries(ALIAS[kind])) if (!exists(names, to)) throw new Error(`${kind} 별칭 대상이 skills.js 에 없음: ${from} → ${to}`);
 }
 
 let src = fs.readFileSync(dataPath, 'utf8');
