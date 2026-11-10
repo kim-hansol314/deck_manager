@@ -248,11 +248,10 @@ export function defaultManager() {
 }
 
 // --- 덱 보정 계산기 → 선수 DB 불러오기 ----------------------------------
-// 계산기 스탯(입력값 + POTM 보너스)을 DB "기본" 칸에 넣고, 종류·각성은 비워 공통 보정이 중복되지 않게 함.
-// 계산기의 스킬점수는 숫자라 DB(스킬 이름+레벨)로 옮길 수 없음.
+// 스탯(파워·정확·선구·인내 / 변화·구위)은 옮기지 않음 — DB에서 기본/훈련/특훈·각성으로 직접 입력.
+// 다시 불러와도 DB에 입력한 스탯·각성·스킬은 그대로 둠. 계산기의 스킬점수(숫자)도 옮기지 않음.
 const POTM_TO_TYPE = { '골글': '골글', '시그': '시그', '임팩': '임팩', '라올': '라올', '라올(타팀)': '라올', '라올(자팀)': '라올' };
 const CALC_GRADE = (v) => (['S', 'SR', 'SR+', 'C', 'C+'].includes(s(v)) ? s(v) : '');
-function calcStat(v, bonus) { return s(v) === '' ? '' : n(v) + bonus; }
 // 이름 앞 연도 표기 → 연도. 87`이만수 → 1987, 03`김태균 → 2003 (올해 뒤 두 자리 이하면 2000년대)
 // 구분자는 ` ' ’ ‘ ´ 모두 허용, 1987`이만수 처럼 네 자리도 그대로 사용
 export function yearFromName(name) {
@@ -265,21 +264,17 @@ export function yearFromName(name) {
 const withYear = (data, name) => { const y = yearFromName(name); return y ? { ...data, year: y } : data; };
 
 function batterFromCalc(b) {
-  const bonus = potmBonus(b.potm);
   return {
-    pos: OPTIONS.batterPos.includes(s(b.pos)) ? s(b.pos) : '', type: POTM_TO_TYPE[s(b.potm)] || '', awaken: '', name: s(b.name),
+    pos: OPTIONS.batterPos.includes(s(b.pos)) ? s(b.pos) : '', type: POTM_TO_TYPE[s(b.potm)] || '', name: s(b.name),
     full: CALC_GRADE(b.fullSwing), clutch: CALC_GRADE(b.clutch), gakjam: CALC_GRADE(b.gakjam),
-    train: [b.power, b.contact, b.eye, b.patience].map((v) => [calcStat(v, bonus), '', '']),
     hand: b.leftBat ? '좌' : '', launch: b.launch ?? '', white: b.white ?? '', cold: b.cold ?? '',
   };
 }
 function pitcherFromCalc(p) {
-  const bonus = potmBonus(p.potm);
   const pos = s(p.pos).replace(/^\d/, '');
   return {
-    pos: OPTIONS.pitcherPos.includes(pos) ? pos : '', type: POTM_TO_TYPE[s(p.potm)] || '', awaken: '', name: s(p.name),
+    pos: OPTIONS.pitcherPos.includes(pos) ? pos : '', type: POTM_TO_TYPE[s(p.potm)] || '', name: s(p.name),
     jang: CALC_GRADE(p.long), chim: CALC_GRADE(p.calm), gakjam: CALC_GRADE(p.gakjam),
-    train: [p.stuff, p.velo].map((v) => [calcStat(v, bonus), '', '']),
     lefty: p.lefty ? 'O' : '',
   };
 }

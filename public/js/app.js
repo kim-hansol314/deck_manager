@@ -548,7 +548,7 @@ async function importFromCalc(kind) {
   const rows = (kind === 'b' ? page.deck.calc.batters : page.deck.calc.pitchers).filter((r) => String(r.name || '').trim());
   if (!rows.length) return toast(`덱 보정 계산기에 이름이 입력된 ${label}가 없습니다.`, 'err');
   const ok = await ask(`계산기 ${label} ${rows.length}명을 DB로 불러올까요?`,
-    '빈 칸에 추가하고, 전에 계산기에서 불러온 선수는 최신 값으로 갱신합니다. DB에 직접 입력한 같은 이름의 선수는 건드리지 않습니다. 스탯은 POTM 보너스를 더해 "기본" 칸에 들어가며, 스킬은 이름·레벨을 따로 입력해야 합니다. 이름이 87`이만수처럼 연도로 시작하면 연도 칸(1987)도 채웁니다.',
+    '빈 칸에 추가하고, 전에 계산기에서 불러온 선수는 최신 값으로 갱신합니다. DB에 직접 입력한 같은 이름의 선수는 건드리지 않습니다. 스탯(파워·정확·선구·인내 / 변화·구위)·각성·스킬은 옮기지 않으니 DB에서 직접 입력하세요. 이름이 87`이만수처럼 연도로 시작하면 연도 칸(1987)도 채웁니다.',
     '불러오기', 'primary');
   if (!ok) return;
   const db = kind === 'b' ? page.deck.manager.dbB : page.deck.manager.dbP;
