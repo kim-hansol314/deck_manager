@@ -171,6 +171,10 @@ a.who:hover b { text-decoration: underline; }
 .grid.db thead tr:nth-child(2) th { top: 27px; }
 .grid tbody tr:hover td, .grid tbody tr:hover th { background: color-mix(in srgb, var(--field) 5%, transparent); }
 .grid th.pos { font-family: var(--mono); font-weight: 500; color: var(--field); text-align: left; padding-left: 10px; }
+.grid th.pos .drag { display: inline-block; margin-right: 6px; color: var(--ink-2); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; padding: 2px; opacity: .55; }
+.grid th.pos .drag:hover { opacity: 1; }
+.grid tr.dragging td, .grid tr.dragging th { background: color-mix(in srgb, var(--field) 12%, var(--paper)); }
+.grid tr.dragging .drag { cursor: grabbing; opacity: 1; }
 .grid td.c { text-align: center; }
 .grid td.score { background: color-mix(in srgb, var(--lamp) 16%, transparent); text-align: right; }
 .grid td.score .out { font-family: var(--mono); font-weight: 500; font-size: 1rem; min-width: 64px; display: inline-block; }
@@ -230,3 +234,4 @@ select.in { padding-right: 2px; }
   .demo-bar { padding: 6px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+.site-foot { max-width: 1320px; margin: 0 auto; padding: 16px 24px 32px; text-align: center; font-size: .8rem; color: var(--ink-2); }

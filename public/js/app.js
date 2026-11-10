@@ -2,7 +2,7 @@ import { createStore, isDemo } from './store.js';
 import { SITE_TITLE, ADMIN_EMAILS } from './config.js';
 import { computeCalc, computeManager, defaultCalc, defaultManager } from './calc.js';
 import { importCalc, importManager, SHEETS } from './importer.js';
-import { bind, setPath, renderCalc, calcOutputs, renderManager, managerOutputs, MGR_TABS, datalists, esc, fmt } from './views.js';
+import { bind, getPath, setPath, renderCalc, calcOutputs, renderManager, managerOutputs, MGR_TABS, datalists, esc, fmt } from './views.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -379,8 +379,58 @@ function renderDeck() {
     view.addEventListener('change', onEdit);
     $('#xl').onchange = onImport;
     $('#reset-tab').onclick = resetTab;
+    view.addEventListener('pointerdown', onDragStart);
   }
   refreshOutputs();
+}
+
+// ---- 투수 행 끌어서 순서 바꾸기 (SP끼리, RP끼리) ----
+function onDragStart(e) {
+  const handle = e.target.closest('.drag');
+  if (!handle || page.ro || e.button > 0) return;
+  const row = handle.closest('tr');
+  const tbody = row.parentElement;
+  const group = row.dataset.dragGroup;
+  const groupRows = () => [...tbody.querySelectorAll(`tr[data-drag-group="${group}"]`)];
+  const labels = groupRows().map((r) => $('.pos-l', r).textContent); // 자리 이름은 위에서부터 고정
+  const relabel = () => groupRows().forEach((r, k) => ($('.pos-l', r).textContent = labels[k]));
+  e.preventDefault();
+  handle.setPointerCapture(e.pointerId);
+  row.classList.add('dragging');
+
+  const onMove = (ev) => {
+    const others = groupRows().filter((r) => r !== row);
+    const before = others.find((r) => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+    const last = others[others.length - 1];
+    if (before) { if (row.nextElementSibling !== before) tbody.insertBefore(row, before); }
+    else if (last.nextElementSibling !== row) tbody.insertBefore(row, last.nextElementSibling);
+    relabel();
+  };
+  const onEnd = (ev) => {
+    handle.removeEventListener('pointermove', onMove);
+    handle.removeEventListener('pointerup', onEnd);
+    handle.removeEventListener('pointercancel', onEnd);
+    row.classList.remove('dragging');
+    const order = groupRows().map((r) => Number(r.dataset.idx));
+    const slots = [...order].sort((a, b) => a - b);
+    const changed = order.some((o, k) => o !== slots[k]);
+    if (!changed) return;
+    const moved = ev.type === 'pointerup';
+    if (moved) {
+      // 선수 정보는 함께 옮기고 포지션 이름(pos)은 자리에 남김
+      const arr = getPath(page.deck, tbody.dataset.reorder);
+      const items = order.map((o) => arr[o]);
+      const poss = slots.map((s) => arr[s].pos);
+      slots.forEach((s, k) => (arr[s] = { ...items[k], pos: poss[k] }));
+    }
+    const y = window.scrollY;
+    renderDeck(); // 취소됐거나 바뀌었으면 데이터 기준으로 다시 그림
+    window.scrollTo(0, y);
+    if (moved) scheduleSave();
+  };
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onEnd);
+  handle.addEventListener('pointercancel', onEnd);
 }
 
 function parseInput(el) {
@@ -509,7 +559,22 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 
+// 하단 "최종 업데이트" — 배포 때 기록되는 version.json 을 읽음 (없으면 표시 안 함)
+async function showUpdated() {
+  try {
+    const res = await fetch('version.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    const d = new Date((await res.json()).updated);
+    if (isNaN(d)) return;
+    const text = d.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const foot = $('#site-foot');
+    foot.textContent = `최종 업데이트 ${text}`;
+    foot.hidden = false;
+  } catch {}
+}
+
 (async function main() {
+  showUpdated();
   app.innerHTML = '<p class="loading">불러오는 중…</p>';
   try { store = await createStore(); } catch (e) { app.innerHTML = `<p class="err">초기화 실패: ${esc(e.message)} — config.js의 Firebase 설정을 확인하세요.</p>`; return; }
   store.onAuth((u, msg) => {

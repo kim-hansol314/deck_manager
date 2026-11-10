@@ -49,6 +49,17 @@ function chk(p, o = {}) {
 }
 const out = (k, cls = '') => `<output class="out ${cls}" data-out="${k}"></output>`;
 
+// 투수 행 끌어서 순서 바꾸기: 1~5SP(0~4)끼리, 1~6RP(5~10)끼리만 이동
+const dragGroup = (i) => (i < 5 ? 'sp' : i <= 10 ? 'rp' : '');
+function pitcherTr(i) {
+  const g = dragGroup(i);
+  return g && !ctx.ro ? `<tr data-drag-group="${g}" data-idx="${i}">` : '<tr>';
+}
+function pitcherPos(i, pos) {
+  const handle = dragGroup(i) && !ctx.ro ? '<span class="drag" title="끌어서 순서 바꾸기" aria-hidden="true">⠿</span>' : '';
+  return `<th class="pos">${handle}<span class="pos-l">${esc(pos)}</span></th>`;
+}
+
 export function datalists() {
   return `<datalist id="dl-skill-b">${DATA.skillBatter.map((r) => `<option value="${esc(r[0])}">`).join('')}</datalist>
   <datalist id="dl-skill-p">${DATA.skillPitcher.map((r) => `<option value="${esc(r[0])}">`).join('')}</datalist>`;
@@ -80,8 +91,8 @@ export function renderCalc(st) {
   }).join('');
   const pRows = st.calc.pitchers.map((x, i) => {
     const p = `${P}.pitchers.${i}`;
-    return `<tr>
-      <th class="pos">${esc(x.pos)}</th>
+    return `${pitcherTr(i)}
+      ${pitcherPos(i, x.pos)}
       <td>${txt(p + '.name', { cls: 'name', label: '투수 이름' })}</td>
       <td class="score">${out(`c.p.${i}.score`)}</td>
       <td>${num(p + '.stuff', { label: '변화' })}<small class="plus" data-out="c.p.${i}.plus"></small></td>
@@ -124,9 +135,10 @@ export function renderCalc(st) {
   </section>
   <section class="panel">
     <div class="panel-head"><h3>투수</h3><div class="mini-sum">보정 합 <b data-out="c.psum"></b> · 평균 <b data-out="c.pavg"></b></div></div>
+    ${ctx.ro ? '' : '<p class="help">포지션 왼쪽 ⠿를 끌면 SP끼리, RP끼리 순서를 바꿀 수 있습니다.</p>'}
     <div class="tbl-wrap"><table class="grid">
       <thead><tr><th>포지션</th><th>이름</th><th>보정스탯</th><th>변화</th><th>구위</th><th>스킬점수</th><th>장억</th><th>침착</th><th>각잠</th><th>좌완</th><th>POTM</th><th>전술</th></tr></thead>
-      <tbody>${pRows}</tbody>
+      <tbody data-reorder="calc.pitchers">${pRows}</tbody>
     </table></div>
     <div class="groups">
       <div><span>선발 합 (1위 ×1.4, 2~4위 ×1.3, 5위 ×1.2)</span><b data-out="c.sp"></b></div>
@@ -354,9 +366,9 @@ function mgrLineup(st) {
   const pRows = st.manager.lineupP.map((x, i) => {
     const p = `${P}.${i}`;
     const role = i >= 5 && i <= 10 ? sel(p + '.role', OPTIONS.rpRoles, { blank: true, label: '중계 역할' }) : out(`m.lp.${i}.group`);
-    return `<tr>
+    return `${pitcherTr(i)}
       <td class="out-c">${role}<small class="hint" data-out="m.lp.${i}.w"></small></td>
-      <th class="pos">${esc(x.pos)}</th>
+      ${pitcherPos(i, x.pos)}
       <td>${sel(p + '.name', pNames, { blank: true, cls: 'name', label: '투수 선택' })}</td>
       <td class="out-c">${out(`m.lp.${i}.info`)}</td>
       <td class="score">${out(`m.lp.${i}.score`)}</td>
@@ -385,11 +397,11 @@ function mgrLineup(st) {
   </section>
   <section class="panel">
     <div class="panel-head"><h3>투수 라인업</h3><div class="mini-sum">투수 합계 <b data-out="m.psum"></b> · 평균 <b data-out="m.pavg"></b></div></div>
-    <p class="help">1RP~6RP는 중계 역할을 고르세요. 현재 전술의 순서: <b data-out="m.roles"></b> (가중치 0.8 / 0.7 / 0.5 / 0.3 / 0.1 / 0). <span class="status" data-out="m.status"></span></p>
+    <p class="help">포지션 왼쪽 ⠿를 끌면 SP끼리, RP끼리 순서를 바꿀 수 있습니다. 1RP~6RP는 중계 역할을 고르세요. 현재 전술의 순서: <b data-out="m.roles"></b> (가중치 0.8 / 0.7 / 0.5 / 0.3 / 0.1 / 0). <span class="status" data-out="m.status"></span></p>
     ${pNames.length ? '' : '<p class="empty">투수 DB에 선수를 먼저 등록하면 여기서 고를 수 있습니다.</p>'}
     <div class="tbl-wrap"><table class="grid">
       <thead><tr><th>구분</th><th>포지션</th><th>이름</th><th>종류·각성·연도</th><th>보정스탯</th><th>변화</th><th>구위</th><th>스킬점수</th><th>장/침/변/각잠</th><th>전술</th><th>포특 Lv</th><th>+변</th><th>+구</th><th>메이저스킬</th><th>기본스킬</th></tr></thead>
-      <tbody>${pRows}</tbody>
+      <tbody data-reorder="manager.lineupP">${pRows}</tbody>
     </table></div>
     <div class="groups">
       <div><span>선발 합 / 평균</span><b data-out="m.sp"></b></div>

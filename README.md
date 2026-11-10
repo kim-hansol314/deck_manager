@@ -36,6 +36,7 @@ python3 -m http.server 8000     # 또는 npx serve
    firebase use --add            # 위에서 만든 프로젝트 선택
    firebase deploy               # 보안 규칙 + 사이트 함께 배포
    ```
+   배포할 때마다 `public/version.json`에 배포 시각이 자동 기록되어 사이트 하단에 "최종 업데이트 날짜"로 표시됩니다.
    완료되면 `https://<프로젝트ID>.web.app` 주소가 나옵니다. 이 주소를 클럽원에게 공유하면 됩니다.
 
 다른 호스팅(GitHub Pages, Netlify 등)에 `public` 폴더만 올려도 됩니다. 이때는 Firebase 콘솔 → Authentication → 설정 → **승인된 도메인**에 그 주소를 추가하고, 보안 규칙은 Firestore → 규칙 탭에 `firestore.rules` 내용을 붙여넣고 게시하세요.

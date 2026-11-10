@@ -5,8 +5,9 @@
   "hosting": {
     "public": "public",
     "ignore": ["firebase.json", "**/.*"],
+    "predeploy": ["node tools/stamp-version.js"],
     "headers": [
-      { "source": "**/*.@(js|css)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+      { "source": "**/*.@(js|css|json)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
     ]
   }
 }
