@@ -253,6 +253,16 @@ export function defaultManager() {
 const POTM_TO_TYPE = { '골글': '골글', '시그': '시그', '임팩': '임팩', '라올': '라올', '라올(타팀)': '라올', '라올(자팀)': '라올' };
 const CALC_GRADE = (v) => (['S', 'SR', 'SR+', 'C', 'C+'].includes(s(v)) ? s(v) : '');
 function calcStat(v, bonus) { return s(v) === '' ? '' : n(v) + bonus; }
+// 이름 앞 연도 표기 → 연도. 87`이만수 → 1987, 03`김태균 → 2003 (올해 뒤 두 자리 이하면 2000년대)
+// 구분자는 ` ' ’ ‘ ´ 모두 허용, 1987`이만수 처럼 네 자리도 그대로 사용
+export function yearFromName(name) {
+  const m = s(name).match(/^(\d{2}|\d{4})\s*[`'’‘´]/);
+  if (!m) return '';
+  if (m[1].length === 4) return Number(m[1]);
+  const yy = Number(m[1]);
+  return yy <= new Date().getFullYear() % 100 ? 2000 + yy : 1900 + yy;
+}
+const withYear = (data, name) => { const y = yearFromName(name); return y ? { ...data, year: y } : data; };
 
 function batterFromCalc(b) {
   const bonus = potmBonus(b.potm);
@@ -287,7 +297,7 @@ export function importCalcToDB(kind, calcRows, db) {
     const name = s(row.name);
     if (!name || seen.has(name)) continue;
     seen.add(name);
-    const data = conv(row);
+    const data = withYear(conv(row), name);
     const i = db.findIndex((r) => s(r.name) === name);
     if (i >= 0) {
       if (!db[i].fromCalc) { res.skipped.push(name); continue; }
