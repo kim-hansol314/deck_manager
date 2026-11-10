@@ -395,10 +395,12 @@ function onDragStart(e) {
   const labels = groupRows().map((r) => $('.pos-l', r).textContent); // 자리 이름은 위에서부터 고정
   const relabel = () => groupRows().forEach((r, k) => ($('.pos-l', r).textContent = labels[k]));
   e.preventDefault();
-  handle.setPointerCapture(e.pointerId);
   row.classList.add('dragging');
+  // 행을 DOM에서 옮기면 포인터 캡처가 풀리므로 이벤트는 window에서 받음
+  const pid = e.pointerId;
 
   const onMove = (ev) => {
+    if (ev.pointerId !== pid) return;
     const others = groupRows().filter((r) => r !== row);
     const before = others.find((r) => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
     const last = others[others.length - 1];
@@ -407,9 +409,10 @@ function onDragStart(e) {
     relabel();
   };
   const onEnd = (ev) => {
-    handle.removeEventListener('pointermove', onMove);
-    handle.removeEventListener('pointerup', onEnd);
-    handle.removeEventListener('pointercancel', onEnd);
+    if (ev.pointerId !== pid) return;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onEnd);
+    window.removeEventListener('pointercancel', onEnd);
     row.classList.remove('dragging');
     const order = groupRows().map((r) => Number(r.dataset.idx));
     const slots = [...order].sort((a, b) => a - b);
@@ -428,9 +431,9 @@ function onDragStart(e) {
     window.scrollTo(0, y);
     if (moved) scheduleSave();
   };
-  handle.addEventListener('pointermove', onMove);
-  handle.addEventListener('pointerup', onEnd);
-  handle.addEventListener('pointercancel', onEnd);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onEnd);
+  window.addEventListener('pointercancel', onEnd);
 }
 
 function parseInput(el) {
