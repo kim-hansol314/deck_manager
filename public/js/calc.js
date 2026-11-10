@@ -304,13 +304,15 @@ export function importCalcToDB(kind, calcRows, db) {
 }
 
 // --- 참조 테이블 조회 --------------------------------------------------
-const skillMap = (rows) => {
+// 예전 스킬 이름(skillAlias)도 새 이름의 점수로 찾음 — 이미 저장된 덱이 0점이 되지 않게
+const skillMap = (rows, alias = {}) => {
   const m = new Map();
   rows.forEach((r) => { if (!m.has(s(r[0]))) m.set(s(r[0]), r.slice(1)); });
+  Object.entries(alias).forEach(([from, to]) => { if (!m.has(s(from)) && m.has(s(to))) m.set(s(from), m.get(s(to))); });
   return m;
 };
-const SKILL_B = skillMap(DATA.skillBatter);
-const SKILL_P = skillMap(DATA.skillPitcher);
+const SKILL_B = skillMap(DATA.skillBatter, DATA.skillAlias?.batter);
+const SKILL_P = skillMap(DATA.skillPitcher, DATA.skillAlias?.pitcher);
 function skillScore(map, name, lv) {
   const row = map.get(s(name));
   const L = n(lv);
