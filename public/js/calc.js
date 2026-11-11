@@ -102,8 +102,8 @@ export function relayOrder(tactic) {
   return ({ '330': '셋1 추1 셋2 승1 추2 추3', '240': '승1 추1 승2 추2 추3 추4', '114': '승1 추1 롱1 롱2 롱3 롱4', '141': '승1 추1 추2 롱1 추3 추4' })[s(tactic)] || '투수전술 선택';
 }
 
-const blankBatter = (pos = '') => ({ pos, name: '', power: '', contact: '', eye: '', patience: '', skill: '', white: 0, cold: 0, fullSwing: '범부', clutch: '범부', gakjam: '개방X', leftBat: false, launch: '', potm: '' });
-const blankPitcher = (pos = '') => ({ pos, name: '', stuff: '', velo: '', skill: '', long: '범부', calm: '범부', gakjam: '개방X', lefty: false, potm: '' });
+export const blankBatter = (pos = '') => ({ pos, name: '', power: '', contact: '', eye: '', patience: '', skill: '', white: 0, cold: 0, fullSwing: '범부', clutch: '범부', gakjam: '개방X', leftBat: false, launch: '', potm: '' });
+export const blankPitcher = (pos = '') => ({ pos, name: '', stuff: '', velo: '', skill: '', long: '범부', calm: '범부', gakjam: '개방X', lefty: false, potm: '' });
 
 export function defaultCalc() {
   return {
@@ -111,8 +111,8 @@ export function defaultCalc() {
     batters: CALC_BATTER_POS.map(blankBatter),
     pitchers: CALC_PITCHER_POS.map(blankPitcher),
     compare: { b: [{ p: '', c: '', e: '' }, { p: '', c: '', e: '' }], p: [{ velo: '', stuff: '' }, { velo: '', stuff: '' }] },
-    // 선수 비교 칸 (타자 2명, 투수 2명)
-    playerCmp: { b: [blankBatter(), blankBatter()], p: [blankPitcher(), blankPitcher()] },
+    // 선수 비교 칸 (타자 3명, 투수 3명)
+    playerCmp: { b: [blankBatter(), blankBatter(), blankBatter()], p: [blankPitcher(), blankPitcher(), blankPitcher()] },
   };
 }
 

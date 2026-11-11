@@ -178,6 +178,9 @@ a.who:hover b { text-decoration: underline; }
 .grid tr.dragging td, .grid tr.dragging th { background: color-mix(in srgb, var(--field) 12%, var(--paper)); }
 .grid tr.dragging .drag { cursor: grabbing; opacity: 1; }
 .grid td.c { text-align: center; }
+.tbl-wrap + .tbl-wrap { margin-top: 12px; }
+.grid td.cmp-tools .sel { max-width: 170px; }
+.grid td.cmp-tools .btn { margin-left: 4px; }
 .grid td.score { background: color-mix(in srgb, var(--lamp) 16%, transparent); text-align: right; }
 .grid td.score .out { font-family: var(--mono); font-weight: 500; font-size: 1rem; min-width: 64px; display: inline-block; }
 .grid td.out-c { text-align: center; color: var(--ink-2); font-variant-numeric: tabular-nums; }

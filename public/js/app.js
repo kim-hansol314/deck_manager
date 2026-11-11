@@ -1,8 +1,8 @@
 import { createStore, isDemo } from './store.js';
 import { SITE_TITLE, ADMIN_EMAILS } from './config.js';
-import { computeCalc, computeManager, defaultCalc, defaultManager, importCalcToDB } from './calc.js';
+import { computeCalc, computeManager, defaultCalc, defaultManager, importCalcToDB, blankBatter, blankPitcher } from './calc.js';
 import { importCalc, importManager, SHEETS } from './importer.js';
-import { bind, getPath, setPath, renderCalc, calcOutputs, renderManager, managerOutputs, MGR_TABS, datalists, esc, fmt } from './views.js';
+import { bind, getPath, setPath, cmpLoadOptions, renderCalc, calcOutputs, renderManager, managerOutputs, MGR_TABS, datalists, esc, fmt } from './views.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -380,7 +380,23 @@ function renderDeck() {
     $('#xl').onchange = onImport;
     $('#reset-tab').onclick = resetTab;
     view.addEventListener('pointerdown', onDragStart);
-    view.addEventListener('click', (e) => { const b = e.target.closest('[data-calc-import]'); if (b) importFromCalc(b.dataset.calcImport); });
+    view.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-calc-import]'); if (b) importFromCalc(b.dataset.calcImport);
+      const c = e.target.closest('[data-pc-clear]'); if (c) setCmpRow(c.dataset.pcClear, null);
+    });
+    view.addEventListener('change', (e) => {
+      const el = e.target.closest('[data-pc-load]');
+      if (el && el.value !== '') setCmpRow(el.dataset.pcLoad, Number(el.value));
+    });
+    // 목록을 열 때 계산기 표의 현재 선수로 다시 채움 (표에 방금 입력한 선수도 보이게)
+    const refreshLoad = (e) => {
+      const el = e.target.closest && e.target.closest('[data-pc-load]');
+      if (!el) return;
+      const html = cmpLoadOptions(page.deck, el.dataset.pcLoad[0]);
+      if (el.innerHTML !== html) el.innerHTML = html;
+    };
+    view.addEventListener('mousedown', refreshLoad);
+    view.addEventListener('focusin', refreshLoad);
   }
   refreshOutputs();
 }
@@ -542,6 +558,18 @@ async function onImport(e) {
     toast(`${parts} 데이터를 가져왔습니다.`);
   } catch (err) { toast('가져오지 못했습니다: ' + err.message, 'err'); }
 }
+// 선수 비교 한 줄: from = 계산기 표의 행 번호(불러오기) 또는 null(지우기)
+function setCmpRow(key, from) {
+  const [kind, i] = key.split('.');
+  const blank = kind === 'b' ? blankBatter : blankPitcher;
+  const src = from === null ? null : (kind === 'b' ? page.deck.calc.batters : page.deck.calc.pitchers)[from];
+  page.deck.calc.playerCmp[kind][Number(i)] = src ? { ...blank(), ...JSON.parse(JSON.stringify(src)), pos: '' } : blank();
+  const y = window.scrollY;
+  renderDeck();
+  window.scrollTo(0, y);
+  scheduleSave();
+}
+
 // 덱 보정 계산기의 타자/투수 → 관리기 선수 DB
 async function importFromCalc(kind) {
   const label = kind === 'b' ? '타자' : '투수';

@@ -174,18 +174,36 @@ export function renderCalc(st) {
       </ul>
     </div>
   </section>
-  ${renderPlayerCmp()}`;
+  ${renderPlayerCmp(st)}`;
 }
 
-// 선수 비교: 타자 2명·투수 2명을 위 표와 같은 공식으로 계산해 비교
-function renderPlayerCmp() {
+// 선수 비교 "계산기에서 불러오기" 목록 (이름이 있는 계산기 표 선수만). 목록을 열 때마다 다시 채움(app.js)
+export function cmpLoadOptions(st, kind) {
+  const list = kind === 'b' ? st.calc.batters : st.calc.pitchers;
+  const opts = list.map((x, j) => (String(x.name || '').trim() ? `<option value="${j}">${esc(x.pos)} ${esc(x.name)}</option>` : '')).join('');
+  return `<option value="">${opts ? '계산기에서 불러오기' : '계산기 표에 선수 없음'}</option>${opts}`;
+}
+// 선수 비교 줄 앞부분: 번호 + (편집 가능할 때) 계산기에서 불러오기 · 지우기
+function cmpLead(st, kind, i) {
+  const label = `${kind === 'b' ? '타자' : '투수'} ${i + 1}`;
+  if (ctx.ro) return `<th class="pos">${label}</th>`;
+  return `<th class="pos">${label}</th>
+      <td class="cmp-tools"><select class="in sel" data-pc-load="${kind}.${i}" aria-label="${label} 계산기에서 불러오기">${cmpLoadOptions(st, kind)}</select>
+        <button type="button" class="btn ghost sm" data-pc-clear="${kind}.${i}" title="이 줄 지우기">지우기</button></td>`;
+}
+
+// 선수 비교: 타자 3명·투수 3명을 위 표와 같은 공식으로 계산해 비교 (차이는 1번 선수 기준)
+function renderPlayerCmp(st) {
   const P = 'calc.playerCmp';
-  const bRows = [0, 1].map((i) => {
+  const N = [0, 1, 2];
+  const toolsTh = ctx.ro ? '' : '<th>불러오기 · 지우기</th>';
+  const bRows = N.map((i) => {
     const p = `${P}.b.${i}`;
     return `<tr>
-      <th class="pos">타자 ${i + 1}</th>
+      ${cmpLead(st, 'b', i)}
       <td>${txt(p + '.name', { cls: 'name', label: '타자 이름' })}</td>
       <td class="score">${out(`c.pc.b.${i}.score`)}</td>
+      <td class="out-c">${i ? out(`c.pc.b.${i}.diff`) : '<span class="muted">기준</span>'}</td>
       ${['power', 'contact', 'eye', 'patience'].map((k) => `<td>${num(`${p}.${k}`, { label: k })}<small class="plus" data-out="c.pc.b.${i}.plus"></small></td>`).join('')}
       <td>${num(p + '.skill', { label: '스킬점수' })}</td>
       <td>${num(p + '.white', { cls: 'xs', min: 0, label: '흰존' })}</td>
@@ -198,12 +216,13 @@ function renderPlayerCmp() {
       <td>${sel(p + '.potm', OPTIONS.potm, { blankLabel: '없음' })}</td>
     </tr>`;
   }).join('');
-  const pRows = [0, 1].map((i) => {
+  const pRows = N.map((i) => {
     const p = `${P}.p.${i}`;
     return `<tr>
-      <th class="pos">투수 ${i + 1}</th>
+      ${cmpLead(st, 'p', i)}
       <td>${txt(p + '.name', { cls: 'name', label: '투수 이름' })}</td>
       <td class="score">${out(`c.pc.p.${i}.score`)}</td>
+      <td class="out-c">${i ? out(`c.pc.p.${i}.diff`) : '<span class="muted">기준</span>'}</td>
       <td>${num(p + '.stuff', { label: '변화' })}<small class="plus" data-out="c.pc.p.${i}.plus"></small></td>
       <td>${num(p + '.velo', { label: '구위' })}<small class="plus" data-out="c.pc.p.${i}.plus"></small></td>
       <td>${num(p + '.skill', { label: '스킬점수' })}</td>
@@ -217,17 +236,15 @@ function renderPlayerCmp() {
   return `
   <section class="panel">
     <h3>선수 비교</h3>
-    <p class="help">두 선수를 위 타자·투수 표와 같은 공식으로 계산해 비교합니다. </p>
+    <p class="help">최대 3명을 위 타자·투수 표와 같은 공식으로 계산해 비교합니다. 차이는 1번 선수 기준입니다.${ctx.ro ? '' : ' "계산기에서 불러오기"로 위 표의 선수를 가져온 뒤 값을 바꿔 볼 수도 있고, 직접 입력해도 됩니다.'}</p>
     <div class="tbl-wrap"><table class="grid">
-      <thead><tr><th></th><th>이름</th><th>보정스탯</th><th>파워</th><th>정확</th><th>선구</th><th>인내</th><th>스킬점수</th><th>흰존</th><th>콜존</th><th>풀스윙</th><th>클러치</th><th>각잠</th><th>좌타</th><th>발사각</th><th>POTM</th></tr></thead>
+      <thead><tr><th></th>${toolsTh}<th>이름</th><th>보정스탯</th><th>차이</th><th>파워</th><th>정확</th><th>선구</th><th>인내</th><th>스킬점수</th><th>흰존</th><th>콜존</th><th>풀스윙</th><th>클러치</th><th>각잠</th><th>좌타</th><th>발사각</th><th>POTM</th></tr></thead>
       <tbody>${bRows}</tbody>
     </table></div>
-    <div class="groups"><div><span>타자 차이 (타자 2 − 타자 1)</span><b data-out="c.pc.b.diff"></b></div></div>
     <div class="tbl-wrap"><table class="grid">
-      <thead><tr><th></th><th>이름</th><th>보정스탯</th><th>변화</th><th>구위</th><th>스킬점수</th><th>장억</th><th>침착</th><th>각잠</th><th>좌완</th><th>POTM</th></tr></thead>
+      <thead><tr><th></th>${toolsTh}<th>이름</th><th>보정스탯</th><th>차이</th><th>변화</th><th>구위</th><th>스킬점수</th><th>장억</th><th>침착</th><th>각잠</th><th>좌완</th><th>POTM</th></tr></thead>
       <tbody>${pRows}</tbody>
     </table></div>
-    <div class="groups"><div><span>투수 차이 (투수 2 − 투수 1)</span><b data-out="c.pc.p.diff"></b></div></div>
   </section>`;
 }
 
@@ -258,8 +275,9 @@ export function calcOutputs(st, r) {
     o[`c.pc.p.${i}.score`] = pOn[i] ? fmt(p.score) : '';
     o[`c.pc.p.${i}.plus`] = p.bonus ? `+${p.bonus}` : '';
   });
-  o['c.pc.b.diff'] = bOn[0] && bOn[1] ? signed(pc.b[1].score - pc.b[0].score) : '–';
-  o['c.pc.p.diff'] = pOn[0] && pOn[1] ? signed(pc.p[1].score - pc.p[0].score) : '–';
+  // 차이: 1번 선수 대비
+  pc.b.forEach((b, i) => { if (i) o[`c.pc.b.${i}.diff`] = bOn[0] && bOn[i] ? signed(b.score - pc.b[0].score) : '–'; });
+  pc.p.forEach((p, i) => { if (i) o[`c.pc.p.${i}.diff`] = pOn[0] && pOn[i] ? signed(p.score - pc.p[0].score) : '–'; });
   Object.assign(o, {
     'c.relay': r.relayOrder, 'c.bsum': fmt(r.batterSum), 'c.bavg': fmt(r.batterAvg), 'c.psum': fmt(r.pitcherSum), 'c.pavg': fmt(r.pitcherAvg),
     'c.g.core': fmt(r.groups.core), 'c.g.upper': fmt(r.groups.upper), 'c.g.middle': fmt(r.groups.middle), 'c.g.lower': fmt(r.groups.lower),
